@@ -1,73 +1,79 @@
 # Python 传统通信本地基线
 
-这是传统通信 Demo 的 Python 版本，使用 `D:\miniconda3\envs\semcom-py` 环境运行。
+这是“内容 2：传统通信模型搭建”的 Python 单机基线。运行环境为：
 
-可复现创建环境：
+```text
+D:\miniconda3\envs\semcom-py
+```
+
+该环境已经安装 FFmpeg 8.1.2，图片和视频不再使用临时的 `deflate` 格式，而是使用正式媒体格式：
+
+- 文字：UTF-8 字节，文件扩展名为 `.txt`。
+- 图片：输入使用 PPM 作为人为生成的原始 RGB 样本，发送载荷使用 JPEG，扩展名为 `.jpg`。
+- 视频：输入使用 TVID1 作为人为生成的原始 RGB 帧样本，发送载荷使用 H.264 编码并封装为 MP4，扩展名为 `.mp4`。
+
+PPM 和 TVID1 只用于本地构造“原始内容”，便于明确测量编码耗时和压缩前后的数据量。真正经过传统通信链路传输的是 JPEG/MP4 字节数据。
+
+## 创建环境
 
 ```powershell
 & D:\miniconda3\Scripts\conda.exe env create -f environment.yml --force
 ```
 
-当前版本只使用 Python 标准库，便于先在单机上跑通：
+如果环境已经存在，只需确认 FFmpeg：
 
-- 文字：UTF-8 字节传输
-- 图像：PPM + Deflate 无损压缩
-- 视频：自描述 `TVID1` 帧序列 + Deflate 无损压缩
-- 传输：本地 Loopback 适配器，支持分块、延时和丢包参数
-- 接口：健康检查、启动运行、模式切换、状态查询、性能获取、结果获取
-- 日志：配置、传输统计、性能指标、结果校验
+```powershell
+& D:\miniconda3\Scripts\conda.exe run -n semcom-py ffmpeg -version
+```
 
-当前环境没有 FFmpeg，所以默认没有直接调用 JPEG/H.264/MP4。后续接入 FFmpeg 时，只需替换 `traditional_comm/codecs.py`，不需要改运行控制和传输接口。
-
-## 创建样本并运行 Demo
-
-在 PowerShell 中执行：
+## 运行 Demo
 
 ```powershell
 Set-Location D:\workspace\SemCom\traditional_comm_py
 & D:\miniconda3\envs\semcom-py\python.exe -m traditional_comm.cli demo
 ```
 
-也可以分步执行：
+也可以分步运行：
 
 ```powershell
 & D:\miniconda3\envs\semcom-py\python.exe -m traditional_comm.cli generate-samples
 & D:\miniconda3\envs\semcom-py\python.exe -m traditional_comm.cli run
 ```
 
-测试：
+## 测试
 
 ```powershell
 & D:\miniconda3\envs\semcom-py\python.exe -m unittest discover -s tests -v
 ```
 
-运行后生成：
+## 运行结果
+
+每次运行会生成独立目录：
 
 ```text
-samples/sample.txt
-samples/sample.ppm
-samples/sample.tvid
-runs/<run_id>/config.json
-runs/<run_id>/metrics.json
-runs/<run_id>/transport.json
-runs/<run_id>/result.json
-runs/<run_id>/encoded_payload.bin
-runs/<run_id>/output.*
-runs/latest_summary.json
+runs/<run_id>/
+  config.json             # 输入、模式、编码器、参数和任务配置
+  metrics.json            # 数据量、时延、吞吐、质量和资源指标
+  transport.json          # 传输统计
+  result.json             # 结果文件和校验信息
+  encoded_payload.txt     # 发送端编码后的载荷
+  encoded_payload.jpg     # 图片运行的 JPEG 载荷
+  encoded_payload.mp4     # 视频运行的 H.264/MP4 载荷
+  received_payload.*      # 接收端实际收到的载荷
+  output.*                # 可播放或可打开的正式输出文件
+  decoded.ppm/tvid        # 用于质量指标计算的解码后原始数据
 ```
 
-## 代码结构
+图片和视频使用有损编码，因此不能用原始字节哈希判断完全相同；代码会记录输出是否可解码，并记录 PSNR。文字使用无损 UTF-8，可以进行字节级一致性校验。
 
-```text
-traditional_comm/
-  codecs.py       # 编码和解码适配
-  samples.py      # 文字、图像、视频样本生成
-  transport.py    # Loopback 和课题三传输适配接口
-  runner.py       # 单次运行、指标、日志
-  controller.py   # 启动、切换模式、状态、性能、结果接口
-  cli.py          # 命令行入口
-tests/
-  test_smoke.py
+## 接入课题三
+
+`traditional_comm/transport.py` 中的 `TransportAdapter` 是统一传输接口。开发阶段使用 `LoopbackTransport`，接入课题三时使用 `Task3Transport` 包装课题三实现，业务代码不直接依赖 TCP、UDP 或具体硬件。
+
+```python
+from traditional_comm.transport import Task3Transport
+
+transport = Task3Transport(task3_implementation)
 ```
 
 ## 接口示例
@@ -80,5 +86,3 @@ controller.get_status(started["run_id"])
 controller.get_performance(started["run_id"])
 controller.get_result(started["run_id"])
 ```
-
-`Task3Transport` 是预留适配器。接入第三组通信链路时，替换 `LoopbackTransport` 即可，业务运行器不应直接依赖 TCP、UDP 或硬件。

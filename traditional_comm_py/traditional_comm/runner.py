@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from pathlib import Path
 import time
 import tracemalloc
 import uuid
 
 from .codecs import codec_info, decode_payload, encode_payload
-from .samples import parse_tvid
+from .samples import parse_ppm, parse_tvid
 
 
 def create_run_id(kind: str) -> str:
@@ -26,11 +27,84 @@ def _write_json(path: Path, value: dict) -> None:
 def _validate(kind: str, output: bytes) -> tuple[bool, dict]:
     if kind == "text":
         output.decode("utf-8")
-        return True, {}
+        return True, {"format": "txt", "encoding": "utf-8"}
     if kind == "image":
-        magic = output[:2].decode("ascii", errors="replace")
-        return magic == "P6", {"format": magic}
-    return True, parse_tvid(output)
+        info = parse_ppm(output)
+        return True, {
+            "format": "ppm",
+            "width": info["width"],
+            "height": info["height"],
+        }
+    info = parse_tvid(output)
+    return True, {
+        "format": "tvid-decoded-frames",
+        "width": info["width"],
+        "height": info["height"],
+        "fps": info["fps"],
+        "frame_count": info["frame_count"],
+    }
+
+
+def _psnr(source_pixels: bytes, output_pixels: bytes) -> float | None:
+    if len(source_pixels) != len(output_pixels) or not source_pixels:
+        return None
+    squared_error = sum(
+        (source_value - output_value) ** 2
+        for source_value, output_value in zip(source_pixels, output_pixels)
+    )
+    mse = squared_error / len(source_pixels)
+    if mse == 0:
+        return 99.0
+    return round(10 * math.log10((255**2) / mse), 3)
+
+
+def _quality_metrics(kind: str, source: bytes, output: bytes) -> dict:
+    if kind == "image":
+        source_info = parse_ppm(source)
+        output_info = parse_ppm(output)
+        if (source_info["width"], source_info["height"]) != (
+            output_info["width"],
+            output_info["height"],
+        ):
+            return {"psnr": None, "ssim": None, "lpips": None}
+        return {
+            "psnr": _psnr(source_info["pixel_bytes"], output_info["pixel_bytes"]),
+            "ssim": None,
+            "lpips": None,
+        }
+    if kind == "video":
+        source_info = parse_tvid(source)
+        output_info = parse_tvid(output)
+        same_shape = (
+            source_info["width"] == output_info["width"]
+            and source_info["height"] == output_info["height"]
+            and source_info["frame_count"] == output_info["frame_count"]
+        )
+        if not same_shape:
+            return {"psnr": None, "ssim": None, "lpips": None}
+        return {
+            "psnr": _psnr(
+                source[source_info["header_bytes"] :],
+                output[output_info["header_bytes"] :],
+            ),
+            "ssim": None,
+            "lpips": None,
+        }
+    return {"psnr": None, "ssim": None, "lpips": None}
+
+
+def _codec_config(kind: str, encoded) -> dict:
+    config = codec_info(kind)
+    config.update(
+        {
+            "name": encoded.codec,
+            "container": encoded.container,
+            "encoder": encoded.metadata.get("encoder"),
+            "parameters": encoded.metadata.get("parameters", {}),
+            "metadata": encoded.metadata,
+        }
+    )
+    return config
 
 
 def run_one(
@@ -40,6 +114,7 @@ def run_one(
     transport,
     task: dict | None = None,
     run_id: str | None = None,
+    codec_options: dict | None = None,
 ) -> dict:
     task = task or {}
     run_id = run_id or create_run_id(kind)
@@ -52,7 +127,7 @@ def run_one(
     started_at = time.time()
 
     encode_start = time.perf_counter()
-    encoded = encode_payload(kind, input_data)
+    encoded = encode_payload(kind, input_data, codec_options)
     encode_ms = (time.perf_counter() - encode_start) * 1000
 
     transport_start = time.perf_counter()
@@ -65,20 +140,31 @@ def run_one(
             "task_id": task.get("task_id"),
             "codec": encoded.codec,
             "container": encoded.container,
+            "codec_metadata": encoded.metadata,
             "payload_size": len(encoded.payload),
+            "expected_total_bytes": len(encoded.payload),
         },
     )
     transport_ms = (time.perf_counter() - transport_start) * 1000
 
+    received_path = run_dir / f"received_payload.{encoded.container}"
+    received_path.write_bytes(received)
+    encoded_path = run_dir / f"encoded_payload.{encoded.container}"
+    encoded_path.write_bytes(encoded.payload)
+
     decode_start = time.perf_counter()
-    output = decode_payload(kind, received)
+    output = decode_payload(kind, received, encoded.metadata)
     decode_ms = (time.perf_counter() - decode_start) * 1000
     valid, validation = _validate(kind, output)
-    output_path = run_dir / {"text": "output.txt", "image": "output.ppm", "video": "output.tvid"}[kind]
-    output_path.write_bytes(output)
+
+    output_extension = {"text": "txt", "image": "jpg", "video": "mp4"}[kind]
+    output_path = run_dir / f"output.{output_extension}"
+    output_path.write_bytes(received)
+    decoded_path = run_dir / {"text": "decoded.txt", "image": "decoded.ppm", "video": "decoded.tvid"}[kind]
+    decoded_path.write_bytes(output)
 
     output_hash = sha256(output)
-    content_match = input_hash == output_hash
+    content_match = input_hash == output_hash if kind == "text" else None
     input_bytes = len(input_data)
     encoded_bytes = len(encoded.payload)
     reduction = (input_bytes - encoded_bytes) / input_bytes if input_bytes else 0
@@ -86,6 +172,7 @@ def run_one(
     current, peak = tracemalloc.get_traced_memory()
     tracemalloc.stop()
     process_cpu_ms = (time.process_time() - process_start) * 1000
+    quality = _quality_metrics(kind, input_data, output)
 
     config = {
         "run_id": run_id,
@@ -94,7 +181,7 @@ def run_one(
         "input_path": str(input_path.resolve()),
         "input_sha256": input_hash,
         "task": task,
-        "codec": codec_info(kind),
+        "codec": _codec_config(kind, encoded),
         "transport": "loopback-or-adapter",
         "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(started_at)),
     }
@@ -102,6 +189,8 @@ def run_one(
         "run_id": run_id,
         "mode": "traditional",
         "media_type": kind,
+        "codec": encoded.codec,
+        "container": encoded.container,
         "input_bytes": input_bytes,
         "encoded_payload_bytes": encoded_bytes,
         "actual_sent_bytes": transport_stats["sent_bytes"],
@@ -113,31 +202,48 @@ def run_one(
         "end_to_end_latency_ms": round(total_latency_ms, 3),
         "average_throughput_mbps": transport_stats["average_throughput_mbps"],
         "peak_throughput_mbps": transport_stats["peak_throughput_mbps"],
-        "quality": {"psnr": None, "ssim": None, "lpips": None},
-        "task": {"content_match": int(content_match), "output_valid": int(valid)},
+        "quality": quality,
+        "task": {"content_match": content_match, "output_valid": int(valid)},
         "resource": {
             "python_process_cpu_ms": round(process_cpu_ms, 3),
             "tracemalloc_current_bytes": current,
             "tracemalloc_peak_bytes": peak,
             "gpu_usage": None,
         },
-        "status": "completed" if content_match and valid else "failed",
+        "status": "completed" if valid else "failed",
     }
     _write_json(run_dir / "config.json", config)
     _write_json(run_dir / "metrics.json", metrics)
     _write_json(run_dir / "transport.json", transport_stats)
-    _write_json(run_dir / "result.json", {
+    _write_json(
+        run_dir / "result.json",
+        {
+            "run_id": run_id,
+            "encoded_path": str(encoded_path),
+            "received_path": str(received_path),
+            "output_path": str(output_path),
+            "decoded_path": str(decoded_path),
+            "output_sha256": output_hash,
+            "content_match": content_match,
+            "validation": validation,
+        },
+    )
+    return {
         "run_id": run_id,
-        "output_path": str(output_path),
-        "output_sha256": output_hash,
-        "content_match": content_match,
-        "validation": validation,
-    })
-    (run_dir / "encoded_payload.bin").write_bytes(encoded.payload)
-    return {"run_id": run_id, "run_dir": run_dir, "kind": kind, "metrics": metrics, "output_path": output_path}
+        "run_dir": run_dir,
+        "kind": kind,
+        "metrics": metrics,
+        "output_path": output_path,
+    }
 
 
-def run_all(samples_dir: Path, runs_dir: Path, transport, task: dict | None = None) -> list[dict]:
+def run_all(
+    samples_dir: Path,
+    runs_dir: Path,
+    transport,
+    task: dict | None = None,
+    codec_options: dict | None = None,
+) -> list[dict]:
     runs_dir.mkdir(parents=True, exist_ok=True)
     inputs = {
         "text": samples_dir / "sample.txt",
@@ -147,4 +253,7 @@ def run_all(samples_dir: Path, runs_dir: Path, transport, task: dict | None = No
     missing = [str(path) for path in inputs.values() if not path.exists()]
     if missing:
         raise FileNotFoundError("Missing samples: " + ", ".join(missing))
-    return [run_one(kind, path, runs_dir, transport, task) for kind, path in inputs.items()]
+    return [
+        run_one(kind, path, runs_dir, transport, task, codec_options=codec_options)
+        for kind, path in inputs.items()
+    ]

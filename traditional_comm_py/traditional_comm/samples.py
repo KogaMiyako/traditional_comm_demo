@@ -3,6 +3,56 @@ from __future__ import annotations
 from pathlib import Path
 
 
+def parse_ppm(data: bytes) -> dict:
+    """Parse a binary P6 PPM image and return its dimensions and RGB bytes."""
+    if not data.startswith(b"P6"):
+        raise ValueError("unsupported PPM magic")
+    index = 0
+    tokens: list[bytes] = []
+    while len(tokens) < 4:
+        while index < len(data) and data[index] in b" \t\r\n":
+            index += 1
+        if index < len(data) and data[index] == ord("#"):
+            newline = data.find(b"\n", index)
+            if newline < 0:
+                raise ValueError("invalid PPM comment")
+            index = newline + 1
+            continue
+        start = index
+        while index < len(data) and data[index] not in b" \t\r\n#":
+            index += 1
+        if start == index:
+            raise ValueError("invalid PPM header")
+        tokens.append(data[start:index])
+        if index < len(data) and data[index] == ord("#"):
+            newline = data.find(b"\n", index)
+            if newline < 0:
+                raise ValueError("invalid PPM comment")
+            index = newline + 1
+        elif index < len(data):
+            if data[index] == ord("\r") and index + 1 < len(data) and data[index + 1] == ord("\n"):
+                index += 2
+            else:
+                index += 1
+    magic, width_value, height_value, max_value = tokens
+    if magic != b"P6":
+        raise ValueError("unsupported PPM magic")
+    width, height, max_value_int = int(width_value), int(height_value), int(max_value)
+    if width <= 0 or height <= 0 or max_value_int != 255:
+        raise ValueError("unsupported PPM dimensions or color depth")
+    pixels = data[index:]
+    expected = width * height * 3
+    if len(pixels) != expected:
+        raise ValueError(f"invalid PPM pixel data: expected {expected}, got {len(pixels)}")
+    return {
+        "width": width,
+        "height": height,
+        "max_value": max_value_int,
+        "pixel_bytes": pixels,
+        "pixel_offset": index,
+    }
+
+
 def create_rgb_frame(width: int, height: int, frame_index: int = 0, total_frames: int = 1) -> bytes:
     pixels = bytearray(width * height * 3)
     phase = int(frame_index / max(total_frames, 1) * 255)
