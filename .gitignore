@@ -1,0 +1,6 @@
+.qa_*/
+traditional_comm/samples/*
+!traditional_comm/samples/.gitkeep
+traditional_comm/runs/*
+!traditional_comm/runs/.gitkeep
+*.tmp
