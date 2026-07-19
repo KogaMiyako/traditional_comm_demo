@@ -138,11 +138,15 @@ def run_one(
             "mode": "traditional",
             "sample_id": input_path.name,
             "task_id": task.get("task_id"),
+            "media_type": kind,
             "codec": encoded.codec,
             "container": encoded.container,
             "codec_metadata": encoded.metadata,
             "payload_size": len(encoded.payload),
             "expected_total_bytes": len(encoded.payload),
+            "sequence_id": 0,
+            "channel": task.get("channel", {}),
+            "nodes": task.get("nodes", {}),
         },
     )
     transport_ms = (time.perf_counter() - transport_start) * 1000
@@ -156,6 +160,8 @@ def run_one(
     output = decode_payload(kind, received, encoded.metadata)
     decode_ms = (time.perf_counter() - decode_start) * 1000
     valid, validation = _validate(kind, output)
+    receiver_decode_valid = transport_stats.get("receiver_decode_valid", True)
+    valid = bool(valid and receiver_decode_valid is not False)
 
     output_extension = {"text": "txt", "image": "jpg", "video": "mp4"}[kind]
     output_path = run_dir / f"output.{output_extension}"
@@ -180,9 +186,19 @@ def run_one(
         "media_type": kind,
         "input_path": str(input_path.resolve()),
         "input_sha256": input_hash,
+        "sample": {
+            "sample_id": input_path.name,
+            "path": str(input_path.resolve()),
+            "media_type": kind,
+            "original_format": input_path.suffix.lstrip("."),
+            "checksum": input_hash,
+        },
         "task": task,
         "codec": _codec_config(kind, encoded),
-        "transport": "loopback-or-adapter",
+        "channel": task.get("channel", {}),
+        "nodes": task.get("nodes", {}),
+        "system": task.get("system", {}),
+        "transport": transport_stats.get("transport", type(transport).__name__),
         "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(started_at)),
     }
     metrics = {
@@ -195,6 +211,10 @@ def run_one(
         "encoded_payload_bytes": encoded_bytes,
         "actual_sent_bytes": transport_stats["sent_bytes"],
         "actual_received_bytes": transport_stats["received_bytes"],
+        "actual_link_total_bytes": transport_stats.get(
+            "actual_link_total_bytes",
+            transport_stats["sent_bytes"],
+        ),
         "data_reduction_ratio": round(reduction, 6),
         "encode_time_ms": round(encode_ms, 3),
         "transport_time_ms": round(transport_ms, 3),
@@ -202,6 +222,9 @@ def run_one(
         "end_to_end_latency_ms": round(total_latency_ms, 3),
         "average_throughput_mbps": transport_stats["average_throughput_mbps"],
         "peak_throughput_mbps": transport_stats["peak_throughput_mbps"],
+        "receiver_decode_time_ms": transport_stats.get("receiver_decode_time_ms"),
+        "receiver_decode_valid": receiver_decode_valid,
+        "receiver_result_path": transport_stats.get("receiver_result_path"),
         "quality": quality,
         "task": {"content_match": content_match, "output_valid": int(valid)},
         "resource": {
@@ -226,6 +249,8 @@ def run_one(
             "output_sha256": output_hash,
             "content_match": content_match,
             "validation": validation,
+            "receiver_decode_valid": receiver_decode_valid,
+            "receiver_result_path": transport_stats.get("receiver_result_path"),
         },
     )
     return {

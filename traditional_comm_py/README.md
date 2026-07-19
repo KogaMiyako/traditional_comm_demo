@@ -86,3 +86,50 @@ controller.get_status(started["run_id"])
 controller.get_performance(started["run_id"])
 controller.get_result(started["run_id"])
 ```
+
+## 两台服务器局域网测试
+
+当前已经提供 `LanTcpTransport` 和 `LanTcpReceiver`。接收端单独运行，发送端通过 TCP 发送 JPEG/MP4 字节。接收端会保存正式载荷、解码结果和 `receiver_result.json`。
+
+服务器 B（接收端）：
+
+```powershell
+Set-Location D:\workspace\SemCom\traditional_comm_py
+& D:\miniconda3\envs\semcom-py\python.exe -m traditional_comm.cli tcp-receive `
+    --bind 0.0.0.0 `
+    --port 5000 `
+    --output D:\workspace\SemCom\traditional_comm_py\runs_receiver
+```
+
+服务器 A（发送端，以图片为例）：
+
+```powershell
+Set-Location D:\workspace\SemCom\traditional_comm_py
+& D:\miniconda3\envs\semcom-py\python.exe -m traditional_comm.cli tcp-send `
+    --host 192.168.1.20 `
+    --port 5000 `
+    --kind image `
+    --input samples\sample.ppm `
+    --runs runs_sender
+```
+
+将 `192.168.1.20` 替换为服务器 B 的局域网 IP。视频测试只需替换参数：
+
+```powershell
+--kind video --input samples\sample.tvid
+```
+
+接收端默认接收一个业务载荷后退出；发送端的健康检查连接不会计入业务载荷数量。需要持续监听时使用：
+
+```powershell
+--max-connections 0
+```
+
+联调前需要确认：
+
+- 两台服务器处于同一局域网，能互相访问目标 IP。
+- 服务器 B 防火墙允许 TCP 5000 入站。
+- 两台服务器均有 Python 3.12、FFmpeg 和相同代码。
+- 服务器 A 能够访问服务器 B 的 IP 和端口。
+
+传输协议使用长度前缀 + JSON 元数据 + payload 字节，包含 `run_id`、媒体类型、编码格式、载荷长度、序号和 SHA-256 校验值。当前只实现 TCP 版本，UDP 不在本次实现中。

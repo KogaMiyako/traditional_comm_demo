@@ -21,8 +21,9 @@
   │
   ▼
 传输层 transport.py
-  ├─ 当前开发阶段：LoopbackTransport 本地回环
-  └─ 联调阶段：Task3Transport -> 课题三通信链路
+  ├─ 单机阶段：LoopbackTransport 本地回环
+  ├─ 两台服务器阶段：LanTcpTransport -> LanTcpReceiver
+  └─ 课题三联调阶段：Task3Transport -> 课题三通信链路
   │
   ▼
 接收端解码
@@ -65,7 +66,7 @@ traditional_comm_py/
 │  ├─ __init__.py                  # 对外导出的主要类
 │  ├─ samples.py                   # 原始样本生成和解析
 │  ├─ codecs.py                    # JPEG、H.264/MP4 编解码适配
-│  ├─ transport.py                 # 传输适配器和本地回环链路
+│  ├─ transport.py                 # 传输适配器、本地回环和 TCP 局域网链路
 │  ├─ runner.py                    # 单次运行、指标和结果保存
 │  ├─ controller.py                # 启动、状态、性能和结果接口
 │  └─ cli.py                       # 命令行入口
@@ -346,6 +347,14 @@ LoopbackTransport(
 它记录发送字节数、接收字节数、分块数量、丢失分块数量、回环耗时、平均吞吐和峰值吞吐。
 
 当前实现没有模拟真实 SNR、BER、Wi-Fi、5G、TCP 或 UDP，只用于先完成单系统闭环和接口测试。
+
+#### LanTcpTransport 和 LanTcpReceiver
+
+LanTcpTransport 是两台服务器局域网测试使用的发送端适配器；LanTcpReceiver 是独立运行在接收服务器上的 TCP 服务。二者使用 semcom-traditional-tcp-v1 协议。
+
+LanTcpTransport.send_payload() 会发送带长度前缀的 JSON 元数据和 payload，等待接收端 ACK，并把接收端是否完整接收、是否成功解码、接收端结果路径等信息写入 transport 统计。为了兼容现有 runner.py，发送端返回本地编码 payload 供发送端流程继续校验；真正的接收文件和接收端解码结果保存在 LanTcpReceiver 的运行目录中。
+
+LanTcpReceiver 会校验 payload 长度和 SHA-256，保存 received_payload.*、output.*、decoded.* 和 receiver_result.json。健康检查消息不会计入业务连接数。
 
 #### Task3Transport
 
@@ -760,6 +769,12 @@ actual_received_bytes：
 - 接收端实际重组得到的字节数。
 - 发生丢包时可能小于发送字节数。
 
+actual_link_total_bytes：
+
+- 传输适配器统计的实际链路字节总量。
+- Loopback 中等于一次本地载荷量；LAN TCP 中包含数据帧和 ACK 帧的协议开销。
+- 因此它与 encoded_payload_bytes 不同，比较传统和语义模式时应明确使用哪一种口径。
+
 data_reduction_ratio 计算公式：
 
 ~~~text
@@ -810,7 +825,7 @@ data_reduction_ratio 计算公式：
 | 配置 | CLI 参数和函数参数 | cli.py、runner.py |
 | 运行控制 | 控制器同步接口 | controller.py |
 | 编解码适配 | JPEG、H.264/MP4、UTF-8 | codecs.py |
-| 传输适配 | Loopback、Task3 包装器 | transport.py |
+| 传输适配 | Loopback、LanTcp、Task3 包装器 | transport.py |
 | 任务输出 | 当前以重建和格式校验为主 | runner.py |
 | 性能指标 | JSON 指标汇总 | runner.py |
 | 结果存储 | 独立运行目录和 JSON | runner.py |
@@ -849,15 +864,18 @@ get_error(run_id)
 
 ~~~python
 health_check()
+prepare_run(config)
 switch_mode(mode)
 start_run(config)
 get_status(run_id)
 get_performance(run_id)
 get_result(run_id)
 stop_run(run_id)
+cancel_run(run_id)
+get_error(run_id)
 ~~~
 
-prepare_run() 和结构化 get_error() 尚未独立实现，后续接入 Web 前应补充。
+prepare_run() 会检查媒体类型、输入文件和输出目录；get_error() 返回结构化错误信息。当前 stop_run()/cancel_run() 可以更新状态，但同步运行中的 FFmpeg 进程仍需要后续后台任务机制才能真正中断。
 
 建议统一状态：
 
@@ -951,7 +969,7 @@ snr_sweep:
 当前代码适合内容 2 单机 Demo 和接口验证，还不是完整的现场部署系统，主要差距如下：
 
 1. 当前输入图片默认是 PPM，视频默认是 TVID1；如果要直接读取已有 JPG/MP4，需要增加真实文件输入适配。
-2. 当前传输使用本地回环；真实 TCP、UDP、无线设备或课题三硬件尚未接入。
+2. 当前默认 Demo 使用本地回环；两台服务器的 TCP 局域网适配器已经提供，真实 UDP、无线设备或课题三硬件尚未接入。
 3. 当前控制器是同步运行；取消接口还不能中断正在运行的 FFmpeg。
 4. 当前没有独立的 events.jsonl 生命周期事件日志。
 5. 当前资源指标只记录 Python 进程和内存跟踪，尚未接入 GPU、显存和设备状态采集。
@@ -992,3 +1010,153 @@ snr_sweep:
 3. 提供运行状态、节点状态、链路状态和结果查询。
 4. 使用相同的 run_id、sample_id、task_id 和链路条件，与语义通信结果并列展示。
 
+## 11. 两台服务器局域网 TCP 测试
+
+当前已经提供 LanTcpTransport 和 LanTcpReceiver。它们位于 transport.py 中，使用统一的 TransportAdapter 接口，不会让 runner.py 直接依赖 TCP。
+
+### 11.1 两端角色
+
+服务器 A 是发送端：
+
+```text
+读取样本 -> JPEG/H.264/MP4 编码 -> TCP 发送 -> 等待接收端确认
+```
+
+服务器 B 是接收端：
+
+```text
+TCP 监听 -> 接收完整 payload -> 校验长度和 SHA-256
+         -> 保存 received_payload.* 和 output.*
+         -> 解码 -> 保存 decoded.* 和 receiver_result.json
+```
+
+发送端仍然会保存自己的运行目录；接收端也会按照相同 run_id 保存一份接收结果，因此两端可以通过 run_id 关联。
+
+### 11.2 启动接收端
+
+在服务器 B 上执行：
+
+```powershell
+Set-Location D:\workspace\SemCom\traditional_comm_py
+& D:\miniconda3\envs\semcom-py\python.exe -m traditional_comm.cli tcp-receive --bind 0.0.0.0 --port 5000 --output D:\workspace\SemCom\traditional_comm_py\runs_receiver
+```
+
+参数含义：
+
+- bind：接收端监听地址。服务器上通常使用 0.0.0.0。
+- port：监听端口，默认 5000。
+- output：接收端结果目录。
+- max-connections：业务载荷数量，默认 1；健康检查连接不计入该数量。
+
+如果需要持续接收多个任务：
+
+```powershell
+& D:\miniconda3\envs\semcom-py\python.exe -m traditional_comm.cli tcp-receive --bind 0.0.0.0 --port 5000 --output runs_receiver --max-connections 0
+```
+
+持续监听时使用 Ctrl+C 停止服务。
+
+### 11.3 启动发送端
+
+在服务器 A 上执行，下面以图片为例：
+
+```powershell
+Set-Location D:\workspace\SemCom\traditional_comm_py
+& D:\miniconda3\envs\semcom-py\python.exe -m traditional_comm.cli tcp-send --host 192.168.1.20 --port 5000 --kind image --input samples\sample.ppm --runs runs_sender
+```
+
+将 192.168.1.20 替换为服务器 B 的局域网 IP。
+
+视频发送：
+
+```powershell
+& D:\miniconda3\envs\semcom-py\python.exe -m traditional_comm.cli tcp-send --host 192.168.1.20 --port 5000 --kind video --input samples\sample.tvid --runs runs_sender
+```
+
+发送端支持编码参数：
+
+```powershell
+--jpeg-quality 3 --h264-crf 23 --h264-preset ultrafast
+```
+
+### 11.4 TCP 帧格式
+
+TCP 是字节流，没有天然的消息边界。因此程序没有直接假设一次 recv 就能收到完整文件，而是使用如下帧格式：
+
+```text
+4 字节无符号整数：JSON 头部长度，网络字节序
+JSON 头部：run_id、媒体类型、编码格式、载荷长度、序号和 SHA-256
+payload：JPEG、MP4 或文字字节
+```
+
+发送元数据示例：
+
+```json
+{
+  "protocol": "semcom-traditional-tcp-v1",
+  "message_type": "payload",
+  "run_id": "traditional-image-...",
+  "media_type": "image",
+  "codec": "jpeg",
+  "container": "jpg",
+  "payload_size": 3449,
+  "expected_total_bytes": 3449,
+  "sequence_id": 0,
+  "sha256": "..."
+}
+```
+
+接收端会检查协议名、消息类型、载荷长度和 SHA-256；检查失败时返回结构化错误确认。
+
+### 11.5 两端结果
+
+发送端目录：
+
+```text
+runs_sender/<run_id>/
+  config.json
+  metrics.json
+  transport.json
+  result.json
+  encoded_payload.jpg 或 encoded_payload.mp4
+  received_payload.jpg 或 received_payload.mp4
+  output.jpg 或 output.mp4
+  decoded.ppm 或 decoded.tvid
+```
+
+接收端目录：
+
+```text
+runs_receiver/<run_id>/
+  received_payload.jpg 或 received_payload.mp4
+  output.jpg 或 output.mp4
+  decoded.ppm 或 decoded.tvid
+  receiver_result.json
+```
+
+接收端的 receiver_result.json 重点查看：
+
+- received_bytes
+- sha256
+- receiver_decode_valid
+- receiver_decode_time_ms
+- received_path
+- decoded_path
+
+### 11.6 局域网排查顺序
+
+1. 在接收端确认 FFmpeg 和 Python 环境可用。
+2. 确认接收端服务显示正在监听目标端口。
+3. 在发送端确认目标 IP 正确。
+4. 检查 Windows/Linux 防火墙是否允许 TCP 5000 入站。
+5. 先发送文字，再发送图片，最后发送视频。
+6. 对比两端相同 run_id 的 received_bytes 和 SHA-256。
+7. 使用 FFprobe 检查接收端 output.jpg 或 output.mp4。
+8. 如果传输成功但解码失败，优先检查两端 FFmpeg 版本、codec_metadata 和文件是否被截断。
+
+### 11.7 当前 TCP 方案的边界
+
+- TCP 版本用于验证两台服务器之间的可靠字节传输，不等价于课题三真实无线链路。
+- 当前不模拟 SNR、BER、丢包和重传；TCP 的重传由操作系统负责。
+- 当前接收端会解码并保存结果，但任务模型、资源采集和 Web API 尚未接入。
+- 后续如果需要显式研究丢包和乱序，应新增 UDP 适配器，不应把 UDP 逻辑写入 runner.py 或 codecs.py。

@@ -3,12 +3,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import tempfile
+import threading
 import unittest
 
 from traditional_comm.controller import TraditionalCommunicationController
 from traditional_comm.runner import run_all
 from traditional_comm.samples import generate_samples, parse_tvid
-from traditional_comm.transport import LoopbackTransport
+from traditional_comm.transport import LanTcpReceiver, LanTcpTransport, LoopbackTransport
 
 
 class TraditionalCommunicationSmokeTest(unittest.TestCase):
@@ -45,11 +46,55 @@ class TraditionalCommunicationSmokeTest(unittest.TestCase):
             )
             self.assertTrue(controller.health_check()["online"])
             self.assertEqual(controller.switch_mode("traditional"), {"mode": "traditional"})
+            self.assertTrue(controller.prepare_run({"kind": "text", "input_path": str(samples["text"])})["ready"])
             started = controller.start_run({"kind": "text", "input_path": str(samples["text"])})
             self.assertTrue(started["run_id"].startswith("traditional-text-"))
             self.assertEqual(controller.get_status(started["run_id"])["status"], "completed")
+            self.assertEqual(controller.get_status(started["run_id"])["phase"], "completed")
+            self.assertFalse(controller.get_error(started["run_id"])["has_error"])
             self.assertEqual(controller.get_performance(started["run_id"])["task"]["content_match"], 1)
             self.assertTrue(controller.get_result(started["run_id"])["content_match"])
+
+    def test_lan_tcp_transport_and_receiver(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="traditional-lan-") as root:
+            root_path = Path(root)
+            receiver = LanTcpReceiver("127.0.0.1", 0, root_path / "receiver-runs")
+            receiver.start()
+            receiver_results: dict = {}
+
+            def serve() -> None:
+                receiver_results["items"] = receiver.serve_forever(max_connections=1)
+
+            thread = threading.Thread(target=serve, daemon=True)
+            thread.start()
+            try:
+                transport = LanTcpTransport("127.0.0.1", receiver.address[1])
+                self.assertTrue(transport.health_check()["online"])
+                payload = "局域网传统通信测试".encode("utf-8")
+                received, stats = transport.send_payload(
+                    payload,
+                    {
+                        "run_id": "traditional-text-lan-test",
+                        "mode": "traditional",
+                        "media_type": "text",
+                        "codec": "utf8",
+                        "container": "txt",
+                        "codec_metadata": {},
+                        "expected_total_bytes": len(payload),
+                    },
+                )
+                self.assertEqual(received, payload)
+                self.assertEqual(stats["transport"], "lan-tcp")
+                self.assertEqual(stats["sent_bytes"], len(payload))
+                self.assertEqual(stats["received_bytes"], len(payload))
+                self.assertTrue(stats["acknowledged"])
+                self.assertTrue(stats["receiver_decode_valid"])
+                thread.join(timeout=5)
+                self.assertFalse(thread.is_alive())
+                receiver_result = root_path / "receiver-runs" / "traditional-text-lan-test" / "receiver_result.json"
+                self.assertTrue(receiver_result.exists())
+            finally:
+                receiver.close()
 
 
 if __name__ == "__main__":
