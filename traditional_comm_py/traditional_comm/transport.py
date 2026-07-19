@@ -507,6 +507,8 @@ class LanTcpReceiver:
             "run_id": ack.get("run_id"),
             "received_bytes": ack.get("received_bytes", 0),
             "receiver_decode_valid": ack.get("receiver_decode_valid"),
+            "receiver_result_path": ack.get("receiver_result_path"),
+            "receiver_error": ack.get("receiver_error") or ack.get("error"),
             "elapsed_ms": round((time.perf_counter() - started) * 1000, 3),
         }
         self._last_stats = stats

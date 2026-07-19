@@ -7,7 +7,7 @@ import threading
 from typing import Any
 
 from .runner import create_run_id, run_one
-from .transport import LanTcpTransport, LoopbackTransport
+from .transport import LanTcpReceiver, LanTcpTransport, LoopbackTransport
 
 
 MEDIA_KINDS = {"text", "image", "video"}
@@ -331,6 +331,189 @@ class WebRunManager:
         path = (run_dir / name).resolve()
         if run_dir not in path.parents:
             raise ValueError("file is outside the run directory")
+        if not path.is_file():
+            raise FileNotFoundError(name)
+        return path
+
+
+class WebReceiverManager:
+    """Own the TCP receiver lifecycle for the receiver-side Web page."""
+
+    def __init__(self, runs_dir: Path):
+        self.runs_dir = Path(runs_dir).resolve()
+        self.runs_dir.mkdir(parents=True, exist_ok=True)
+        self._lock = threading.RLock()
+        self._receiver: LanTcpReceiver | None = None
+        self._stop_event: threading.Event | None = None
+        self._thread: threading.Thread | None = None
+        self._state: dict[str, Any] = {
+            "online": False,
+            "status": "stopped",
+            "bind_host": "0.0.0.0",
+            "port": None,
+            "address": None,
+            "output_dir": str(self.runs_dir),
+            "started_at": None,
+            "stopped_at": None,
+            "last_connection_at": None,
+            "last_error": None,
+            "received_count": 0,
+            "health_check_count": 0,
+            "last_result": None,
+        }
+
+    @staticmethod
+    def _now() -> str:
+        return datetime.now(timezone.utc).isoformat()
+
+    def _status_locked(self) -> dict[str, Any]:
+        status = dict(self._state)
+        if status.get("address") is not None:
+            status["address"] = list(status["address"])
+        status["thread_alive"] = bool(self._thread and self._thread.is_alive())
+        return status
+
+    def get_status(self) -> dict[str, Any]:
+        with self._lock:
+            return self._status_locked()
+
+    def start(self, bind_host: str = "0.0.0.0", port: int = 5000) -> dict[str, Any]:
+        with self._lock:
+            if self._receiver is not None and self._state["online"]:
+                return self._status_locked()
+
+            receiver = LanTcpReceiver(bind_host, int(port), self.runs_dir)
+            info = receiver.start()
+            stop_event = threading.Event()
+            self._receiver = receiver
+            self._stop_event = stop_event
+            self._state.update(
+                {
+                    "online": True,
+                    "status": "listening",
+                    "bind_host": str(bind_host),
+                    "port": info["address"][1],
+                    "address": info["address"],
+                    "output_dir": str(self.runs_dir),
+                    "started_at": self._now(),
+                    "stopped_at": None,
+                    "last_connection_at": None,
+                    "last_error": None,
+                    "received_count": 0,
+                    "health_check_count": 0,
+                    "last_result": None,
+                }
+            )
+            thread = threading.Thread(
+                target=self._serve_loop,
+                args=(receiver, stop_event),
+                name="traditional-web-receiver",
+                daemon=True,
+            )
+            self._thread = thread
+            thread.start()
+            return self._status_locked()
+
+    def _load_result(self, run_id: str | None) -> dict[str, Any] | None:
+        if not run_id:
+            return None
+        result_path = self.runs_dir / str(run_id) / "receiver_result.json"
+        if not result_path.is_file():
+            return None
+        try:
+            return json.loads(result_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+
+    def _serve_loop(self, receiver: LanTcpReceiver, stop_event: threading.Event) -> None:
+        while not stop_event.is_set():
+            try:
+                connection_stats = receiver.serve_once()
+            except OSError as exc:
+                if stop_event.is_set():
+                    break
+                with self._lock:
+                    self._state["last_error"] = str(exc)
+                    self._state["status"] = "failed"
+                break
+            except Exception as exc:
+                with self._lock:
+                    self._state["last_error"] = str(exc)
+                    self._state["status"] = "failed"
+                break
+
+            with self._lock:
+                self._state["last_connection_at"] = self._now()
+                if connection_stats.get("message_type") == "health_check":
+                    self._state["health_check_count"] += 1
+                    continue
+                self._state["received_count"] += 1
+                run_id = connection_stats.get("run_id")
+                result = self._load_result(run_id)
+                self._state["last_result"] = result or {
+                    "run_id": run_id,
+                    "received_bytes": connection_stats.get("received_bytes", 0),
+                    "receiver_decode_valid": connection_stats.get("receiver_decode_valid"),
+                    "receiver_error": connection_stats.get("error"),
+                }
+
+        with self._lock:
+            if self._receiver is receiver:
+                self._state["online"] = False
+                if self._state.get("status") != "failed":
+                    self._state["status"] = "stopped"
+                self._state["stopped_at"] = self._now()
+
+    def stop(self) -> dict[str, Any]:
+        with self._lock:
+            receiver = self._receiver
+            stop_event = self._stop_event
+            thread = self._thread
+            if receiver is None:
+                return self._status_locked()
+            if stop_event is not None:
+                stop_event.set()
+            receiver.close()
+
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=2)
+        with self._lock:
+            self._receiver = None
+            self._stop_event = None
+            self._thread = None
+            self._state["online"] = False
+            if self._state.get("status") != "failed":
+                self._state["status"] = "stopped"
+            self._state["stopped_at"] = self._now()
+            return self._status_locked()
+
+    def list_results(self, limit: int = 50) -> list[dict[str, Any]]:
+        candidates = []
+        for result_path in self.runs_dir.glob("*/receiver_result.json"):
+            try:
+                candidates.append((result_path.stat().st_mtime, result_path))
+            except OSError:
+                continue
+        results = []
+        for _, result_path in sorted(candidates, reverse=True)[: max(1, int(limit))]:
+            try:
+                results.append(json.loads(result_path.read_text(encoding="utf-8")))
+            except (OSError, json.JSONDecodeError):
+                continue
+        return results
+
+    def get_result(self, run_id: str) -> dict[str, Any] | None:
+        return self._load_result(run_id)
+
+    def get_file(self, run_id: str, name: str) -> Path:
+        if not name or Path(name).name != name:
+            raise ValueError("file name must not contain a directory")
+        run_dir = (self.runs_dir / str(run_id)).resolve()
+        if self.runs_dir not in run_dir.parents:
+            raise ValueError("run_id is outside the receiver directory")
+        path = (run_dir / name).resolve()
+        if run_dir not in path.parents:
+            raise ValueError("file is outside the receiver run directory")
         if not path.is_file():
             raise FileNotFoundError(name)
         return path

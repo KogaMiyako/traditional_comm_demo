@@ -52,6 +52,8 @@ h2 { font-size: 1.1rem; letter-spacing: -0.02em; }
 .status-badge.completed { color: var(--green); }
 .status-badge.failed { color: var(--red); }
 .status-badge.running, .status-badge.preparing { color: var(--amber); }
+.status-badge.online { color: var(--green); }
+.status-badge.offline { color: var(--muted); }
 
 .layout {
   padding: 0 28px 32px;
@@ -67,7 +69,7 @@ h2 { font-size: 1.1rem; letter-spacing: -0.02em; }
   padding: 22px;
   box-shadow: 0 18px 50px rgba(0, 0, 0, .17);
 }
-.control-panel, .process-panel { grid-column: span 6; }
+.control-panel, .receiver-panel, .process-panel, .receiver-results-panel { grid-column: span 6; }
 .metrics-panel, .result-panel { grid-column: span 6; }
 .runs-panel { grid-column: span 12; }
 
@@ -89,6 +91,13 @@ button { cursor: pointer; font: inherit; }
 .secondary { background: transparent; }
 .secondary:disabled, .primary:disabled { opacity: .5; cursor: not-allowed; }
 .text-button { background: transparent; padding: 5px 8px; color: var(--cyan); }
+
+.receiver-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
+.receiver-summary > div { border-top: 1px solid var(--line); padding-top: 10px; }
+.receiver-summary span, .receiver-summary strong { display: block; }
+.receiver-summary span { color: var(--muted); font-size: .75rem; }
+.receiver-summary strong { margin-top: 5px; font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.receiver-last { color: var(--muted); font-size: .78rem; margin-top: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .progress-track { height: 9px; background: #0c1118; border-radius: 999px; overflow: hidden; }
 .progress-value { height: 100%; width: 0; background: linear-gradient(90deg, var(--cyan), var(--green)); transition: width .25s ease; }
@@ -115,6 +124,15 @@ button { cursor: pointer; font: inherit; }
 .metric-table > div span { color: var(--muted); }
 .metric-table.empty, .preview.empty, .runs-list.empty { color: var(--muted); display: block; }
 
+.receiver-result-table { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 20px; margin-top: 14px; }
+.receiver-result-table > div { display: flex; justify-content: space-between; gap: 10px; border-top: 1px solid var(--line); padding: 9px 0; font-size: .78rem; }
+.receiver-result-table span { color: var(--muted); }
+.receiver-result-table strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
+.receiver-result-table.empty { color: var(--muted); display: block; }
+.receiver-history { display: grid; gap: 7px; margin-top: 14px; }
+.receiver-history-item { text-align: left; background: transparent; border: 1px solid var(--line); border-radius: 9px; color: var(--muted); padding: 8px 10px; font-size: .75rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.receiver-history-item:hover { border-color: var(--cyan); color: var(--text); }
+
 .preview { min-height: 180px; display: grid; place-items: center; background: #0a0f15; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
 .preview img, .preview video { display: block; max-width: 100%; max-height: 320px; }
 .file-list { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
@@ -132,10 +150,10 @@ footer { color: var(--muted); font-size: .76rem; padding: 0 28px 28px; }
 @media (max-width: 900px) {
   .topbar { display: block; }
   .health-pill { display: inline-block; margin-top: 18px; }
-  .control-panel, .process-panel, .metrics-panel, .result-panel, .runs-panel { grid-column: span 12; }
+  .control-panel, .receiver-panel, .process-panel, .metrics-panel, .result-panel, .receiver-results-panel, .runs-panel { grid-column: span 12; }
 }
 @media (max-width: 600px) {
   .topbar, .layout { padding-left: 16px; padding-right: 16px; }
-  .form-grid, .metric-cards, .metric-table, .runs-list { grid-template-columns: 1fr; }
+  .form-grid, .metric-cards, .metric-table, .receiver-result-table, .runs-list, .receiver-summary { grid-template-columns: 1fr; }
   footer { padding-left: 16px; padding-right: 16px; }
 }

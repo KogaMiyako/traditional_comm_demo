@@ -6,12 +6,14 @@ import tempfile
 import threading
 import time
 import unittest
+from urllib.request import Request, urlopen
 
 from traditional_comm.controller import TraditionalCommunicationController
 from traditional_comm.runner import run_all
 from traditional_comm.samples import generate_samples, parse_tvid
 from traditional_comm.transport import LanTcpReceiver, LanTcpTransport, LoopbackTransport
-from traditional_comm.web_adapter import WebRunManager
+from traditional_comm.web_adapter import WebReceiverManager, WebRunManager
+from traditional_comm.web_server import DashboardHTTPServer
 
 
 class TraditionalCommunicationSmokeTest(unittest.TestCase):
@@ -113,6 +115,81 @@ class TraditionalCommunicationSmokeTest(unittest.TestCase):
             self.assertEqual(manager.get_metrics(started["run_id"])["task"]["output_valid"], 1)
             self.assertGreaterEqual(len(manager.get_events(started["run_id"])), 5)
             self.assertIsNotNone(manager.get_result(started["run_id"]))
+
+    def test_web_receiver_manager_controls_tcp_listener(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="traditional-web-receiver-") as root:
+            receiver_manager = WebReceiverManager(Path(root) / "receiver-runs")
+            started = receiver_manager.start("127.0.0.1", 0)
+            self.assertTrue(started["online"])
+            self.assertGreater(started["port"], 0)
+            try:
+                transport = LanTcpTransport("127.0.0.1", started["port"])
+                payload = "Web 接收端测试".encode("utf-8")
+                _, stats = transport.send_payload(
+                    payload,
+                    {
+                        "run_id": "traditional-text-web-receiver-test",
+                        "mode": "traditional",
+                        "media_type": "text",
+                        "codec": "utf8",
+                        "container": "txt",
+                        "codec_metadata": {},
+                        "expected_total_bytes": len(payload),
+                    },
+                )
+                self.assertTrue(stats["acknowledged"])
+                for _ in range(100):
+                    if receiver_manager.get_status()["received_count"] == 1:
+                        break
+                    time.sleep(0.01)
+                status = receiver_manager.get_status()
+                self.assertEqual(status["received_count"], 1)
+                result = receiver_manager.get_result("traditional-text-web-receiver-test")
+                self.assertTrue(result["receiver_decode_valid"])
+                self.assertEqual(len(receiver_manager.list_results()), 1)
+            finally:
+                stopped = receiver_manager.stop()
+                self.assertFalse(stopped["online"])
+
+    def test_web_receiver_http_endpoints(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="traditional-web-http-") as root:
+            root_path = Path(root)
+            samples = generate_samples(root_path / "samples")
+            manager = WebRunManager(root_path / "samples", root_path / "runs")
+            receiver_manager = WebReceiverManager(root_path / "receiver-runs")
+            server = DashboardHTTPServer(("127.0.0.1", 0), manager, receiver_manager)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            base_url = f"http://127.0.0.1:{server.server_address[1]}"
+
+            def call(path: str, method: str = "GET", body: dict | None = None) -> dict:
+                data = None if body is None else json.dumps(body).encode("utf-8")
+                request = Request(
+                    base_url + path,
+                    data=data,
+                    method=method,
+                    headers={"Content-Type": "application/json"} if data else {},
+                )
+                with urlopen(request, timeout=5) as response:
+                    return json.loads(response.read().decode("utf-8"))
+
+            try:
+                self.assertFalse(call("/api/receiver/status")["online"])
+                started = call(
+                    "/api/receiver/start",
+                    "POST",
+                    {"bind_host": "127.0.0.1", "port": 0},
+                )
+                self.assertTrue(started["online"])
+                self.assertGreater(started["port"], 0)
+                self.assertEqual(call("/api/receiver/results")["results"], [])
+                stopped = call("/api/receiver/stop", "POST", {})
+                self.assertFalse(stopped["online"])
+            finally:
+                receiver_manager.stop()
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
 
 
 if __name__ == "__main__":

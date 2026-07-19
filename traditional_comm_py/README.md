@@ -106,6 +106,9 @@ http://127.0.0.1:8000/
 
 - 选择样本和媒体类型。
 - 选择本地回环或局域网 TCP 适配器。
+- 在网页中启动或停止本机 TCP 接收端。
+- 显示监听地址、接收次数、最近一次 `run_id` 和接收端解码状态。
+- 预览接收端收到的图片或视频，并下载接收载荷、输出文件和解码结果。
 - 后台启动运行并轮询状态。
 - 显示编码、传输、解码、PSNR、吞吐和端到端时延。
 - 显示 encoding、transport、decoding、completed 等事件时间线。
@@ -125,9 +128,28 @@ GET  /api/runs/<run_id>/events
 GET  /api/runs/<run_id>/result
 POST /api/runs/<run_id>/cancel
 GET  /api/runs/<run_id>/files/<name>
+GET  /api/receiver/status
+GET  /api/receiver/results
+POST /api/receiver/start
+POST /api/receiver/stop
+GET  /api/receiver/runs/<run_id>/result
+GET  /api/receiver/runs/<run_id>/files/<name>
 ```
 
-Web 页面只是控制和展示层，核心编码和传输仍由 `traditional_comm` 模块负责。
+Web 页面只是控制和展示层，核心编码和传输仍由 `traditional_comm` 模块负责。两台服务器都启动一个 Web 服务即可：接收服务器在自己的网页点击“启动接收”，发送服务器在自己的网页选择“局域网 TCP”并填写接收服务器 IP 和端口。
+
+接收服务器建议这样启动：
+
+```powershell
+Set-Location D:\workspace\SemCom\traditional_comm_py
+& D:\miniconda3\envs\semcom-py\python.exe -m traditional_comm.web_server `
+    --host 0.0.0.0 `
+    --port 8000 `
+    --runs runs_sender `
+    --receiver-runs runs_receiver
+```
+
+打开接收服务器的 `http://<接收服务器IP>:8000/`，在“接收端控制框”中填写 `0.0.0.0` 和 `5000`，点击“启动接收”。发送服务器也启动同样的 Web 服务，打开发送页面后把传输方式改为“局域网 TCP”，接收端 IP 填接收服务器局域网地址，端口填 `5000`，再点击“开始发送”。
 
 ## 两台服务器局域网测试
 

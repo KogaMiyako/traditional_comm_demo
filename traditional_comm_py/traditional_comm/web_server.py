@@ -7,7 +7,7 @@ import mimetypes
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlparse
 
-from .web_adapter import WebRunManager
+from .web_adapter import WebReceiverManager, WebRunManager
 
 
 WEB_ROOT = Path(__file__).resolve().parent.parent / "web"
@@ -16,9 +16,15 @@ WEB_ROOT = Path(__file__).resolve().parent.parent / "web"
 class DashboardHTTPServer(ThreadingHTTPServer):
     allow_reuse_address = True
 
-    def __init__(self, address, manager: WebRunManager):
+    def __init__(
+        self,
+        address,
+        manager: WebRunManager,
+        receiver_manager: WebReceiverManager,
+    ):
         super().__init__(address, DashboardHandler)
         self.manager = manager
+        self.receiver_manager = receiver_manager
 
 
 class DashboardHandler(BaseHTTPRequestHandler):
@@ -57,6 +63,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
     def _api_get(self, parts: list[str]) -> None:
         manager = self.server.manager
+        receiver_manager = self.server.receiver_manager
         if parts == ["api", "health"]:
             self._send_json(
                 {
@@ -73,6 +80,20 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if parts == ["api", "runs"]:
             self._send_json({"runs": manager.list_runs()})
             return
+        if parts == ["api", "receiver", "status"]:
+            self._send_json(receiver_manager.get_status())
+            return
+        if parts == ["api", "receiver", "results"]:
+            self._send_json({"results": receiver_manager.list_results()})
+            return
+        if len(parts) >= 5 and parts[:3] == ["api", "receiver", "runs"]:
+            run_id = parts[3]
+            if len(parts) == 5 and parts[4] == "result":
+                self._send_json({"result": receiver_manager.get_result(run_id)})
+                return
+            if len(parts) == 6 and parts[4] == "files":
+                self._send_file(receiver_manager.get_file(run_id, parts[5]))
+                return
         if len(parts) >= 3 and parts[0:2] == ["api", "runs"]:
             run_id = parts[2]
             if len(parts) == 4 and parts[3] == "status":
@@ -97,12 +118,25 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
     def _api_post(self, parts: list[str]) -> None:
         manager = self.server.manager
+        receiver_manager = self.server.receiver_manager
         body = self._read_json()
         if parts == ["api", "runs", "start"]:
             self._send_json(manager.start_run(body), 202)
             return
         if len(parts) == 4 and parts[:2] == ["api", "runs"] and parts[3] == "cancel":
             self._send_json(manager.cancel_run(parts[2]))
+            return
+        if parts == ["api", "receiver", "start"]:
+            self._send_json(
+                receiver_manager.start(
+                    bind_host=str(body.get("bind_host", "0.0.0.0")),
+                    port=int(body.get("port", 5000)),
+                ),
+                202,
+            )
+            return
+        if parts == ["api", "receiver", "stop"]:
+            self._send_json(receiver_manager.stop())
             return
         self._send_error_json(404, "API endpoint not found")
 
@@ -169,13 +203,20 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--samples", type=Path, default=Path(__file__).resolve().parents[1] / "samples")
     parser.add_argument("--runs", type=Path, default=Path(__file__).resolve().parents[1] / "runs")
+    parser.add_argument(
+        "--receiver-runs",
+        type=Path,
+        default=Path(__file__).resolve().parents[1] / "runs_receiver",
+        help="receiver-side output directory",
+    )
     return parser
 
 
 def main() -> None:
     args = build_parser().parse_args()
     manager = WebRunManager(args.samples, args.runs)
-    server = DashboardHTTPServer((args.host, args.port), manager)
+    receiver_manager = WebReceiverManager(args.receiver_runs)
+    server = DashboardHTTPServer((args.host, args.port), manager, receiver_manager)
     print(f"Traditional communication Web dashboard: http://{args.host}:{args.port}/")
     print(f"Samples: {manager.samples_dir}")
     print(f"Runs: {manager.runs_dir}")
@@ -184,6 +225,7 @@ def main() -> None:
     except KeyboardInterrupt:
         print("Web dashboard stopped")
     finally:
+        receiver_manager.stop()
         server.server_close()
 
 

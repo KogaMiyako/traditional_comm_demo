@@ -1,5 +1,0 @@
-samples/*
-!samples/.gitkeep
-runs/*
-!runs/.gitkeep
-*.log

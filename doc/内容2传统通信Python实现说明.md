@@ -1217,10 +1217,12 @@ failed
 - 选择本地回环或局域网 TCP。
 - 设置本地回环延迟和模拟丢包率。
 - 设置局域网 TCP 的接收端地址和端口。
+- 在网页中启动和停止本机 TCP 接收端。
+- 查看监听地址、接收次数、最近接收的 `run_id` 和接收端解码错误。
 - 后台启动任务。
 - 轮询任务状态和事件。
 - 展示数据量、时延、吞吐和 PSNR。
-- 预览 output.jpg 或 output.mp4。
+- 分别预览发送端和接收端的 `output.jpg` 或 `output.mp4`。
 - 查看当前 Web 服务中的历史运行编号。
 
 ### 12.4 当前 API
@@ -1237,16 +1239,39 @@ GET  /api/runs/<run_id>/result
 GET  /api/runs/<run_id>/error
 POST /api/runs/<run_id>/cancel
 GET  /api/runs/<run_id>/files/<name>
+GET  /api/receiver/status
+GET  /api/receiver/results
+POST /api/receiver/start
+POST /api/receiver/stop
+GET  /api/receiver/runs/<run_id>/result
+GET  /api/receiver/runs/<run_id>/files/<name>
 ```
 
 ### 12.5 两台服务器接入注意事项
 
-当前 Web 服务默认管理本机 runs 目录。如果 Web 服务运行在发送端，而接收端是另一台服务器，需要后续增加接收端结果查询 API 或结果上传接口，不能直接使用接收端的本地文件路径。
+现在每台服务器都可以启动一个 Web 服务。接收服务器的 Web 后端管理 `LanTcpReceiver`，发送服务器的 Web 后端管理 `LanTcpTransport`；浏览器只调用本机 Web API，实际 TCP 数据由本机 Python 后端收发。
 
-因此后续正式联调需要补充：
+接收服务器启动：
 
-1. 接收端状态 API。
-2. 接收端 receiver_result.json 查询 API。
-3. 接收端 output.jpg/output.mp4 下载 API。
-4. Web 后端对发送端和接收端结果的统一聚合。
-5. API 身份认证和局域网访问控制。
+```powershell
+Set-Location D:\workspace\SemCom\traditional_comm_py
+& D:\miniconda3\envs\semcom-py\python.exe -m traditional_comm.web_server `
+    --host 0.0.0.0 `
+    --port 8000 `
+    --runs runs_sender `
+    --receiver-runs runs_receiver
+```
+
+打开接收服务器网页，在“接收端控制框”点击“启动接收”。发送服务器也启动 Web 服务，在发送端网页中选择“局域网 TCP”，填写接收服务器 IP 和 `5000` 端口后发送。
+
+接收结果会保存在接收服务器的：
+
+```text
+runs_receiver/<run_id>/
+  received_payload.*
+  output.*
+  decoded.*
+  receiver_result.json
+```
+
+当前仍需在正式部署前补充 API 身份认证和局域网访问控制；双端 Web 控制、接收状态查询和接收文件下载已经具备。

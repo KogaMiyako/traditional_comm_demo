@@ -9,6 +9,7 @@ traditional_comm_py/runs/*
 !traditional_comm_py/runs/.gitkeep
 traditional_comm_py/runs_sender/*
 traditional_comm_py/runs_receiver/*
+traditional_comm_py/runs_*/
 *.tmp
 __pycache__/
 *.py[cod]

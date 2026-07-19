@@ -3,15 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>传统通信 Demo 控制台</title>
+  <title>传统通信双端控制台</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
   <header class="topbar">
     <div>
       <p class="eyebrow">内容 2 · Traditional Communication</p>
-      <h1>传统通信 Demo 控制台</h1>
-      <p class="subtitle">观察编码、传输、接收、解码和结果质量。</p>
+      <h1>传统通信双端控制台</h1>
+      <p class="subtitle">发送端和接收端都通过本机 Web 服务控制，TCP 数据仍由后端负责收发。</p>
     </div>
     <div id="health" class="health-pill">检查服务中…</div>
   </header>
@@ -20,8 +20,8 @@
     <section class="panel control-panel">
       <div class="section-heading">
         <div>
-          <p class="eyebrow">RUN CONTROL</p>
-          <h2>启动一次运行</h2>
+          <p class="eyebrow">SENDER</p>
+          <h2>发送端</h2>
         </div>
         <span id="run-id" class="mono muted">尚未运行</span>
       </div>
@@ -58,17 +58,46 @@
       </div>
 
       <div class="button-row">
-        <button id="start" class="primary">开始运行</button>
+        <button id="start" class="primary">开始发送</button>
         <button id="cancel" class="secondary" disabled>取消运行</button>
-        <span id="command-hint" class="hint">默认使用 LoopbackTransport</span>
+        <span id="command-hint" class="hint">默认使用本地回环，不需要另一台电脑</span>
       </div>
+    </section>
+
+    <section class="panel receiver-panel">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">RECEIVER</p>
+          <h2>接收端控制框</h2>
+        </div>
+        <span id="receiver-status" class="status-badge offline">未监听</span>
+      </div>
+
+      <div class="form-grid">
+        <label>监听地址
+          <input id="receiver-bind" value="0.0.0.0">
+        </label>
+        <label>监听端口
+          <input id="receiver-port" type="number" value="5000" min="1" max="65535">
+        </label>
+      </div>
+      <div class="receiver-summary">
+        <div><span>实际地址</span><strong id="receiver-address">尚未启动</strong></div>
+        <div><span>已接收任务</span><strong id="receiver-count">0</strong></div>
+      </div>
+      <div class="button-row">
+        <button id="receiver-start" class="primary">启动接收</button>
+        <button id="receiver-stop" class="secondary" disabled>停止接收</button>
+        <span id="receiver-hint" class="hint">两台电脑时填写本机可被对方访问的地址</span>
+      </div>
+      <p id="receiver-last" class="receiver-last">最近接收：暂无</p>
     </section>
 
     <section class="panel process-panel">
       <div class="section-heading">
         <div>
           <p class="eyebrow">LIVE PIPELINE</p>
-          <h2>通信过程</h2>
+          <h2>发送过程</h2>
         </div>
         <span id="status-label" class="status-badge">待机</span>
       </div>
@@ -81,7 +110,7 @@
       <div class="section-heading">
         <div>
           <p class="eyebrow">PERFORMANCE</p>
-          <h2>性能指标</h2>
+          <h2>发送端性能指标</h2>
         </div>
       </div>
       <div id="metric-cards" class="metric-cards"></div>
@@ -91,19 +120,32 @@
     <section class="panel result-panel">
       <div class="section-heading">
         <div>
-          <p class="eyebrow">OUTPUT</p>
-          <h2>接收结果</h2>
+          <p class="eyebrow">SENDER OUTPUT</p>
+          <h2>发送端结果</h2>
         </div>
       </div>
-      <div id="preview" class="preview empty">运行完成后显示输出预览</div>
+      <div id="preview" class="preview empty">发送完成后显示输出预览</div>
       <div id="result-files" class="file-list"></div>
+    </section>
+
+    <section class="panel receiver-results-panel">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">RECEIVER OUTPUT</p>
+          <h2>最近接收结果</h2>
+        </div>
+      </div>
+      <div id="receiver-preview" class="preview empty">接收端收到文件后显示预览</div>
+      <div id="receiver-result-table" class="receiver-result-table empty">暂无接收结果</div>
+      <div id="receiver-files" class="file-list"></div>
+      <div id="receiver-history" class="receiver-history"></div>
     </section>
 
     <section class="panel runs-panel">
       <div class="section-heading">
         <div>
           <p class="eyebrow">HISTORY</p>
-          <h2>本次服务已运行任务</h2>
+          <h2>发送端运行记录</h2>
         </div>
         <button id="refresh-runs" class="text-button">刷新</button>
       </div>
@@ -111,7 +153,7 @@
     </section>
   </main>
 
-  <footer>传统通信 Python Demo · Web MVP · 运行结果仍以 runs/<run_id>/ 下的 JSON 文件为准</footer>
+  <footer>传统通信 Python Demo · 双端 Web MVP · 结果仍以发送端 runs/ 和接收端 runs_receiver/ 下的 JSON 文件为准</footer>
   <script src="/app.js"></script>
 </body>
 </html>
