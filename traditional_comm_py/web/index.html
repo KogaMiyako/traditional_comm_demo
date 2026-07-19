@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>传统通信 Demo 控制台</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">内容 2 · Traditional Communication</p>
+      <h1>传统通信 Demo 控制台</h1>
+      <p class="subtitle">观察编码、传输、接收、解码和结果质量。</p>
+    </div>
+    <div id="health" class="health-pill">检查服务中…</div>
+  </header>
+
+  <main class="layout">
+    <section class="panel control-panel">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">RUN CONTROL</p>
+          <h2>启动一次运行</h2>
+        </div>
+        <span id="run-id" class="mono muted">尚未运行</span>
+      </div>
+
+      <div class="form-grid">
+        <label>样本
+          <select id="sample"></select>
+        </label>
+        <label>媒体类型
+          <select id="kind">
+            <option value="text">文字</option>
+            <option value="image" selected>图片</option>
+            <option value="video">视频</option>
+          </select>
+        </label>
+        <label>传输适配器
+          <select id="transport">
+            <option value="loopback" selected>本地回环</option>
+            <option value="lan-tcp">局域网 TCP</option>
+          </select>
+        </label>
+        <label id="delay-field">模拟延迟（ms）
+          <input id="delay-ms" type="number" value="0" min="0" step="1">
+        </label>
+        <label id="loss-field">模拟丢包率
+          <input id="loss-rate" type="number" value="0" min="0" max="0.99" step="0.01">
+        </label>
+        <label class="tcp-field hidden">接收端 IP
+          <input id="tcp-host" value="127.0.0.1">
+        </label>
+        <label class="tcp-field hidden">接收端端口
+          <input id="tcp-port" type="number" value="5000" min="1" max="65535">
+        </label>
+      </div>
+
+      <div class="button-row">
+        <button id="start" class="primary">开始运行</button>
+        <button id="cancel" class="secondary" disabled>取消运行</button>
+        <span id="command-hint" class="hint">默认使用 LoopbackTransport</span>
+      </div>
+    </section>
+
+    <section class="panel process-panel">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">LIVE PIPELINE</p>
+          <h2>通信过程</h2>
+        </div>
+        <span id="status-label" class="status-badge">待机</span>
+      </div>
+      <div class="progress-track"><div id="progress" class="progress-value"></div></div>
+      <div class="process-meta"><span id="phase">等待任务</span><span id="progress-text">0%</span></div>
+      <ol id="events" class="timeline"></ol>
+    </section>
+
+    <section class="panel metrics-panel">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">PERFORMANCE</p>
+          <h2>性能指标</h2>
+        </div>
+      </div>
+      <div id="metric-cards" class="metric-cards"></div>
+      <div id="metric-table" class="metric-table empty">运行完成后显示详细指标</div>
+    </section>
+
+    <section class="panel result-panel">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">OUTPUT</p>
+          <h2>接收结果</h2>
+        </div>
+      </div>
+      <div id="preview" class="preview empty">运行完成后显示输出预览</div>
+      <div id="result-files" class="file-list"></div>
+    </section>
+
+    <section class="panel runs-panel">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">HISTORY</p>
+          <h2>本次服务已运行任务</h2>
+        </div>
+        <button id="refresh-runs" class="text-button">刷新</button>
+      </div>
+      <div id="runs-list" class="runs-list empty">暂无运行记录</div>
+    </section>
+  </main>
+
+  <footer>传统通信 Python Demo · Web MVP · 运行结果仍以 runs/<run_id>/ 下的 JSON 文件为准</footer>
+  <script src="/app.js"></script>
+</body>
+</html>

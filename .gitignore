@@ -7,6 +7,8 @@ traditional_comm_py/samples/*
 !traditional_comm_py/samples/.gitkeep
 traditional_comm_py/runs/*
 !traditional_comm_py/runs/.gitkeep
+traditional_comm_py/runs_sender/*
+traditional_comm_py/runs_receiver/*
 *.tmp
 __pycache__/
 *.py[cod]

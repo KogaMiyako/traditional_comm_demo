@@ -1160,3 +1160,93 @@ runs_receiver/<run_id>/
 - 当前不模拟 SNR、BER、丢包和重传；TCP 的重传由操作系统负责。
 - 当前接收端会解码并保存结果，但任务模型、资源采集和 Web API 尚未接入。
 - 后续如果需要显式研究丢包和乱序，应新增 UDP 适配器，不应把 UDP 逻辑写入 runner.py 或 codecs.py。
+
+## 12. Web 控制台
+
+当前分支 feature/web-dashboard 增加了一个不依赖第三方前端库的 Web MVP，代码位于：
+
+```text
+traditional_comm_py/traditional_comm/web_adapter.py
+traditional_comm_py/traditional_comm/web_server.py
+traditional_comm_py/web/index.html
+traditional_comm_py/web/app.js
+traditional_comm_py/web/style.css
+```
+
+### 12.1 启动方式
+
+```powershell
+Set-Location D:\workspace\SemCom\traditional_comm_py
+& D:\miniconda3\envs\semcom-py\python.exe -m traditional_comm.web_server --host 127.0.0.1 --port 8000
+```
+
+浏览器打开：
+
+```text
+http://127.0.0.1:8000/
+```
+
+### 12.2 WebRunManager
+
+web_adapter.py 中的 WebRunManager 负责：
+
+- 校验样本和媒体类型。
+- 创建独立 run_id。
+- 在后台线程执行 run_one()。
+- 保存运行状态、进度和错误。
+- 将阶段事件写入 events.jsonl。
+- 查询 metrics.json、result.json 和输出文件。
+- 创建 LoopbackTransport 或 LanTcpTransport。
+
+当前阶段事件包括：
+
+```text
+preparing
+encoding
+transport
+decoding
+completed
+failed
+```
+
+### 12.3 页面功能
+
+当前页面支持：
+
+- 选择文字、图片和视频样本。
+- 选择本地回环或局域网 TCP。
+- 设置本地回环延迟和模拟丢包率。
+- 设置局域网 TCP 的接收端地址和端口。
+- 后台启动任务。
+- 轮询任务状态和事件。
+- 展示数据量、时延、吞吐和 PSNR。
+- 预览 output.jpg 或 output.mp4。
+- 查看当前 Web 服务中的历史运行编号。
+
+### 12.4 当前 API
+
+```text
+GET  /api/health
+GET  /api/samples
+GET  /api/runs
+POST /api/runs/start
+GET  /api/runs/<run_id>/status
+GET  /api/runs/<run_id>/metrics
+GET  /api/runs/<run_id>/events
+GET  /api/runs/<run_id>/result
+GET  /api/runs/<run_id>/error
+POST /api/runs/<run_id>/cancel
+GET  /api/runs/<run_id>/files/<name>
+```
+
+### 12.5 两台服务器接入注意事项
+
+当前 Web 服务默认管理本机 runs 目录。如果 Web 服务运行在发送端，而接收端是另一台服务器，需要后续增加接收端结果查询 API 或结果上传接口，不能直接使用接收端的本地文件路径。
+
+因此后续正式联调需要补充：
+
+1. 接收端状态 API。
+2. 接收端 receiver_result.json 查询 API。
+3. 接收端 output.jpg/output.mp4 下载 API。
+4. Web 后端对发送端和接收端结果的统一聚合。
+5. API 身份认证和局域网访问控制。

@@ -87,6 +87,48 @@ controller.get_performance(started["run_id"])
 controller.get_result(started["run_id"])
 ```
 
+## 启动 Web 控制台
+
+当前分支提供一个不依赖第三方前端库的本地 Web MVP：
+
+```powershell
+Set-Location D:\workspace\SemCom\traditional_comm_py
+& D:\miniconda3\envs\semcom-py\python.exe -m traditional_comm.web_server --host 127.0.0.1 --port 8000
+```
+
+浏览器打开：
+
+```text
+http://127.0.0.1:8000/
+```
+
+网页支持：
+
+- 选择样本和媒体类型。
+- 选择本地回环或局域网 TCP 适配器。
+- 后台启动运行并轮询状态。
+- 显示编码、传输、解码、PSNR、吞吐和端到端时延。
+- 显示 encoding、transport、decoding、completed 等事件时间线。
+- 预览接收端输出图片或视频。
+- 查看历史 run_id 和结果文件。
+
+主要 API：
+
+```text
+GET  /api/health
+GET  /api/samples
+GET  /api/runs
+POST /api/runs/start
+GET  /api/runs/<run_id>/status
+GET  /api/runs/<run_id>/metrics
+GET  /api/runs/<run_id>/events
+GET  /api/runs/<run_id>/result
+POST /api/runs/<run_id>/cancel
+GET  /api/runs/<run_id>/files/<name>
+```
+
+Web 页面只是控制和展示层，核心编码和传输仍由 `traditional_comm` 模块负责。
+
 ## 两台服务器局域网测试
 
 当前已经提供 `LanTcpTransport` 和 `LanTcpReceiver`。接收端单独运行，发送端通过 TCP 发送 JPEG/MP4 字节。接收端会保存正式载荷、解码结果和 `receiver_result.json`。

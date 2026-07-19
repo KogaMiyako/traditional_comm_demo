@@ -7,6 +7,7 @@ from pathlib import Path
 import time
 import tracemalloc
 import uuid
+from collections.abc import Callable
 
 from .codecs import codec_info, decode_payload, encode_payload
 from .samples import parse_ppm, parse_tvid
@@ -115,6 +116,7 @@ def run_one(
     task: dict | None = None,
     run_id: str | None = None,
     codec_options: dict | None = None,
+    event_callback: Callable[[dict], None] | None = None,
 ) -> dict:
     task = task or {}
     run_id = run_id or create_run_id(kind)
@@ -122,14 +124,30 @@ def run_one(
     run_dir.mkdir(parents=True, exist_ok=True)
     input_data = input_path.read_bytes()
     input_hash = sha256(input_data)
+    def emit_event(phase: str, progress: int, message: str) -> None:
+        if event_callback is not None:
+            event_callback(
+                {
+                    "time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "run_id": run_id,
+                    "phase": phase,
+                    "progress": progress,
+                    "message": message,
+                }
+            )
+
+    emit_event("preparing", 5, "input and run context prepared")
     tracemalloc.start()
     process_start = time.process_time()
     started_at = time.time()
 
     encode_start = time.perf_counter()
+    emit_event("encoding", 15, f"encoding {kind}")
     encoded = encode_payload(kind, input_data, codec_options)
     encode_ms = (time.perf_counter() - encode_start) * 1000
+    emit_event("encoding", 30, "encoding completed")
 
+    emit_event("transport", 35, "sending encoded payload")
     transport_start = time.perf_counter()
     received, transport_stats = transport.send_payload(
         encoded.payload,
@@ -150,6 +168,7 @@ def run_one(
         },
     )
     transport_ms = (time.perf_counter() - transport_start) * 1000
+    emit_event("transport", 65, "payload acknowledged by transport adapter")
 
     received_path = run_dir / f"received_payload.{encoded.container}"
     received_path.write_bytes(received)
@@ -157,6 +176,7 @@ def run_one(
     encoded_path.write_bytes(encoded.payload)
 
     decode_start = time.perf_counter()
+    emit_event("decoding", 70, f"decoding {encoded.container}")
     output = decode_payload(kind, received, encoded.metadata)
     decode_ms = (time.perf_counter() - decode_start) * 1000
     valid, validation = _validate(kind, output)
@@ -168,6 +188,7 @@ def run_one(
     output_path.write_bytes(received)
     decoded_path = run_dir / {"text": "decoded.txt", "image": "decoded.ppm", "video": "decoded.tvid"}[kind]
     decoded_path.write_bytes(output)
+    emit_event("decoding", 90, "decode and output validation completed")
 
     output_hash = sha256(output)
     content_match = input_hash == output_hash if kind == "text" else None
@@ -253,6 +274,7 @@ def run_one(
             "receiver_result_path": transport_stats.get("receiver_result_path"),
         },
     )
+    emit_event("completed" if metrics["status"] == "completed" else "failed", 100, metrics["status"])
     return {
         "run_id": run_id,
         "run_dir": run_dir,

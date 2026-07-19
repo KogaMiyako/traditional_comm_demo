@@ -4,12 +4,14 @@ import json
 from pathlib import Path
 import tempfile
 import threading
+import time
 import unittest
 
 from traditional_comm.controller import TraditionalCommunicationController
 from traditional_comm.runner import run_all
 from traditional_comm.samples import generate_samples, parse_tvid
 from traditional_comm.transport import LanTcpReceiver, LanTcpTransport, LoopbackTransport
+from traditional_comm.web_adapter import WebRunManager
 
 
 class TraditionalCommunicationSmokeTest(unittest.TestCase):
@@ -95,6 +97,22 @@ class TraditionalCommunicationSmokeTest(unittest.TestCase):
                 self.assertTrue(receiver_result.exists())
             finally:
                 receiver.close()
+
+    def test_web_run_manager_background_run(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="traditional-web-") as root:
+            root_path = Path(root)
+            samples = generate_samples(root_path / "samples")
+            manager = WebRunManager(root_path / "samples", root_path / "runs")
+            started = manager.start_run({"kind": "image", "sample_id": samples["image"].name})
+            for _ in range(200):
+                status = manager.get_status(started["run_id"])
+                if status["status"] in {"completed", "failed"}:
+                    break
+                time.sleep(0.05)
+            self.assertEqual(status["status"], "completed")
+            self.assertEqual(manager.get_metrics(started["run_id"])["task"]["output_valid"], 1)
+            self.assertGreaterEqual(len(manager.get_events(started["run_id"])), 5)
+            self.assertIsNotNone(manager.get_result(started["run_id"]))
 
 
 if __name__ == "__main__":
