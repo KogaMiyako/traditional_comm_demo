@@ -5,6 +5,8 @@
 - `doc/任务要求.txt`
 - `doc/语义原生的泛在智简无线组网方法_Demo方案.docx`
 
+当前已有两种本地实现：`traditional_comm/` 为 Node.js 版，`traditional_comm_py/` 为 Python 版。Python 实现使用 D 盘 Conda 环境 `D:\miniconda3\envs\semcom-py`；后续 Python 开发优先使用该环境的绝对路径或已激活的 `semcom-py` 环境，不依赖系统 Python。
+
 ## 一、任务边界
 
 “内容2”负责传统通信基线，不负责重新实现通信硬件、物理层、语义模型或 Web 页面。
@@ -431,4 +433,3 @@ SNR 取值由联调确定，不要在代码里固定假设具体数列。
 - 失败、取消、超时和链路断开都有结构化状态和错误信息。
 - ARM64 DGX Spark 和 x86_64 主机的环境差异被记录并可检查。
 - Web 页面能够查询任务、拓扑、节点、链路和对比结果所需字段。
-

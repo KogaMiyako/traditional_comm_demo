@@ -3,4 +3,10 @@ traditional_comm/samples/*
 !traditional_comm/samples/.gitkeep
 traditional_comm/runs/*
 !traditional_comm/runs/.gitkeep
+traditional_comm_py/samples/*
+!traditional_comm_py/samples/.gitkeep
+traditional_comm_py/runs/*
+!traditional_comm_py/runs/.gitkeep
 *.tmp
+__pycache__/
+*.py[cod]
