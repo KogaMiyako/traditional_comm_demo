@@ -70,7 +70,7 @@ video_sentiment      -> msa
 
 ### 已接入的下游模型
 
-分类模型和 MMSA 推理封装位于 `../imagec_and_MMSA`，主配置已经填写对应的 `command`、`command_cwd` 和 checkpoint。图像分类会完整经过 JPEG 传统通信流程：
+图像分类和 MMSA 推理封装位于当前目录的 `image_infer.py` 和 `video_sentiment_infer.py`；训练依赖、数据和 checkpoint 位于 `../imagec_and_MMSA`。主配置已经填写对应的 `command`、`command_cwd` 和 checkpoint。图像分类会完整经过 JPEG 传统通信流程：
 
 ```powershell
 & D:\miniconda3\envs\semcom-py\python.exe -m traditional_comm.cli task-run `

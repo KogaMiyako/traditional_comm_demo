@@ -45,11 +45,23 @@
         "python",
         "image_infer.py"
       ],
-      "command_cwd": "../../imagec_and_MMSA",
+      "command_cwd": "..",
       "model": {
         "name": "resnet18",
         "version": "resnet18-cifar10-v1",
-        "checkpoint": "artifacts/checkpoints/resnet18-cifar10-v1.pt"
+        "checkpoint": "imagec_and_MMSA/artifacts/checkpoints/resnet18-cifar10-v1.pt",
+        "source_root": "imagec_and_MMSA",
+        "input_size": 32,
+        "normalize_mean": [
+          0.4914,
+          0.4822,
+          0.4465
+        ],
+        "normalize_std": [
+          0.2023,
+          0.1994,
+          0.201
+        ]
       },
       "metrics": ["accuracy", "f1", "top1", "top5"]
     },
@@ -92,12 +104,14 @@
         "python",
         "video_sentiment_infer.py"
       ],
-      "command_cwd": "../../imagec_and_MMSA",
+      "command_cwd": "..",
       "label_type": "regression",
+      "positive_threshold": 0.0,
       "model": {
         "name": "lf_dnn",
         "version": "mmsa-mosei-v1",
-        "checkpoint": "artifacts/checkpoints/mmsa-mosei-v1.pt"
+        "checkpoint": "imagec_and_MMSA/artifacts/checkpoints/mmsa-mosei-v1.pt",
+        "mmsa_source": "imagec_and_MMSA/MMSA"
       },
       "metrics": ["mae", "correlation", "accuracy", "f1"]
     }

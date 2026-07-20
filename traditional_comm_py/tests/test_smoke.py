@@ -167,6 +167,31 @@ class TraditionalCommunicationSmokeTest(unittest.TestCase):
             )
             self.assertTrue((result["run_dir"] / "result.json").exists())
 
+    def test_external_task_failure_preserves_json_error(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="traditional-task-error-") as root:
+            input_path = Path(root) / "decoded.ppm"
+            input_path.write_bytes(b"test-input")
+            config = load_config()
+            config["tasks"]["image_classification"]["command"] = [
+                sys.executable,
+                "-c",
+                (
+                    "import json,sys; print(json.dumps({'success': False, 'error': 'missing torch', "
+                    "'prediction': None, 'metrics': {}})); sys.exit(1)"
+                ),
+            ]
+            result = ConfiguredTaskAdapter(config).run(
+                kind="image",
+                source_path=input_path,
+                decoded_path=input_path,
+                source_bytes=b"test-input",
+                decoded_bytes=b"test-input",
+                task={"task_type": "image_classification"},
+                quality={},
+            )
+            self.assertFalse(result["success"])
+            self.assertEqual(result["error"], "missing torch")
+
     def test_cifar10_random_sample_materialization(self) -> None:
         with tempfile.TemporaryDirectory(prefix="traditional-cifar-") as root:
             cifar_root = Path(root) / "cifar"

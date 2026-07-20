@@ -18,7 +18,7 @@
     "environment_path": "artifacts/metadata/cifar10_environment.json",
     "command": [
       "python",
-      "image_infer.py"
+      "../traditional_comm_py/image_infer.py"
     ],
     "model": {
       "name": "resnet18",
@@ -68,7 +68,7 @@
     "sample_path": "data/MOSEI/sample_test.pkl",
     "command": [
       "python",
-      "video_sentiment_infer.py"
+      "../traditional_comm_py/video_sentiment_infer.py"
     ],
     "model": {
       "name": "lf_dnn",

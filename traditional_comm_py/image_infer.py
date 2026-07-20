@@ -7,27 +7,28 @@ import sys
 import time
 from pathlib import Path
 
-from PIL import Image
-
-from traditional_comm_py.runtime import PROJECT_ROOT, json_error, load_config, resolve_path
+from inference_runtime import PROJECT_ROOT, json_error, load_config, resolve_path
 
 
 def main() -> int:
     request = None
     config = load_config()
-    cfg = config["image_classification"]
+    cfg = config["tasks"]["image_classification"]
     model_cfg = cfg["model"]
-    checkpoint_display = str(cfg["checkpoint"])
+    checkpoint_display = str(model_cfg["checkpoint"])
     start = time.perf_counter()
     try:
         request = json.load(sys.stdin)
         task_cfg = request.get("task_config", {}).get("model", {})
-        checkpoint_value = task_cfg.get("checkpoint") or cfg["checkpoint"]
+        checkpoint_value = task_cfg.get("checkpoint") or model_cfg["checkpoint"]
         checkpoint = resolve_path(checkpoint_value)
         import torch
+        from PIL import Image
         import torchvision.transforms as transforms
 
-        sys.path.insert(0, str(PROJECT_ROOT / "pytorch-cifar"))
+        source_root_value = task_cfg.get("source_root") or model_cfg["source_root"]
+        source_root = resolve_path(source_root_value)
+        sys.path.insert(0, str(source_root / "pytorch-cifar"))
         from models.resnet import ResNet18
 
         state = torch.load(checkpoint, map_location="cpu")
@@ -35,8 +36,8 @@ def main() -> int:
         model.load_state_dict(state.get("state_dict", state["net"] if "net" in state else state))
         model.eval()
         classes = state.get("classes", ["plane", "car", "bird", "cat", "deer", "dog", "frog", "horse", "ship", "truck"])
-        mean = state.get("normalize_mean", cfg["train"]["normalize_mean"])
-        std = state.get("normalize_std", cfg["train"]["normalize_std"])
+        mean = state.get("normalize_mean", model_cfg["normalize_mean"])
+        std = state.get("normalize_std", model_cfg["normalize_std"])
         image_path = resolve_path(request["input_path"])
         with Image.open(image_path) as image:
             image = image.convert("RGB")

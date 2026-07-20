@@ -52,34 +52,36 @@ python train_video_sentiment.py
 
 ## 独立推理接口
 
-程序从 stdin 读取一个 JSON，只向 stdout 输出一个 JSON；日志和诊断信息输出到 stderr。
+程序从 stdin 读取一个 JSON，只向 stdout 输出一个 JSON；日志和诊断信息输出到 stderr。推理脚本位于项目根目录的 `traditional_comm_py/`，训练目录下只保留训练脚本和模型资产。
 
 图像：
 
 ```bash
-printf '%s\n' '{"task_type":"image_classification","semantic_task":"imgc","dataset":"cifar10","input_path":"artifacts/samples/cifar10_sample.png","reference_path":"data/cifar/test_batch","task_config":{"model":{"name":"resnet18","version":"resnet18-cifar10-v1","checkpoint":"artifacts/checkpoints/resnet18-cifar10-v1.pt"},"metrics":["accuracy","f1","top1","top5"]},"task_context":{}}' | python image_infer.py
+cd ../traditional_comm_py
+printf '%s\n' '{"task_type":"image_classification","semantic_task":"imgc","dataset":"cifar10","input_path":"imagec_and_MMSA/artifacts/samples/cifar10_sample.png","reference_path":"imagec_and_MMSA/data/cifar/test_batch","task_config":{"model":{"name":"resnet18","version":"resnet18-cifar10-v1","checkpoint":"imagec_and_MMSA/artifacts/checkpoints/resnet18-cifar10-v1.pt","source_root":"imagec_and_MMSA"},"metrics":["accuracy","f1","top1","top5"]},"task_context":{}}' | python image_infer.py
 ```
 
 视频情感：
 
 ```bash
-printf '%s\n' '{"task_type":"video_sentiment","semantic_task":"msa","dataset":"mosei","input_path":"data/MOSEI/sample_test.pkl","reference_path":"data/MOSEI/test.pkl","task_config":{"model":{"name":"lf_dnn","version":"mmsa-mosei-v1","checkpoint":"artifacts/checkpoints/mmsa-mosei-v1.pt"},"label_type":"regression","metrics":["mae","correlation","accuracy","f1"]},"task_context":{}}' | python video_sentiment_infer.py
+cd ../traditional_comm_py
+printf '%s\n' '{"task_type":"video_sentiment","semantic_task":"msa","dataset":"mosei","input_path":"imagec_and_MMSA/data/MOSEI/sample_test.pkl","reference_path":"imagec_and_MMSA/data/MOSEI/test.pkl","task_config":{"model":{"name":"lf_dnn","version":"mmsa-mosei-v1","checkpoint":"imagec_and_MMSA/artifacts/checkpoints/mmsa-mosei-v1.pt","mmsa_source":"imagec_and_MMSA/MMSA"},"label_type":"regression","metrics":["mae","correlation","accuracy","f1"]},"task_context":{}}' | python video_sentiment_infer.py
 ```
 
 图像输入可以是单张图片；视频输入可以是 MMSA 完整 `.pkl` 或单样本 `.pkl/.npz`。完整数据文件默认读取 `test` split 的第 0 条样本，也可以在 `task_context` 中传入 `split` 和 `sample_index`。
 
 ## 通信程序和 result.json
 
-`communication.py` 从配置中选择对应的 `command`，调用独立推理程序，并将结果写入：
+主项目的 `traditional_comm` 任务适配器从配置中选择对应的 `command`，调用推理程序，并将结果写入运行目录：
 
 ```text
-artifacts/results/result.json
+runs/<run_id>/result.json
 ```
 
 示例：
 
 ```bash
-printf '%s\n' '<输入 JSON>' | python communication.py
+python -m traditional_comm.cli task-infer --kind video --input imagec_and_MMSA/data/MOSEI/sample_test.pkl --task-type video_sentiment
 ```
 
 最终 `result.json` 包含 `prediction`、`metrics`、`model_version`、`checkpoint` 和 `inference_time_ms`。图像推理没有真实标签时，`top1/top5` 为 `null`；在 `task_context.ground_truth_label` 中提供标签即可计算单样本指标。MOSEI 单样本的 correlation 不可定义时写为 JSON `null`，不会输出非法 `NaN`。

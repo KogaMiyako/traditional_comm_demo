@@ -2,12 +2,14 @@
 
 ## 已接入的模型
 
-模型代码和 checkpoint 位于 `imagec_and_MMSA/`：
+推理脚本位于 `traditional_comm_py/`，训练依赖和 checkpoint 位于 `imagec_and_MMSA/`：
 
 ```text
-imagec_and_MMSA/
+traditional_comm_py/
   image_infer.py
   video_sentiment_infer.py
+
+imagec_and_MMSA/
   pytorch-cifar/
   MMSA/
   artifacts/checkpoints/resnet18-cifar10-v1.pt
@@ -157,15 +159,16 @@ MP4 解码 -> 文本/音频/视觉特征提取 -> MMSA 推理
 主项目接口级测试已通过：
 
 ```text
-Ran 7 tests
+Ran 8 tests
 OK
 ```
 
 已验证内容包括：
 
 - 外部任务 JSON 输入输出协议；
-- `command_cwd` 能够定位到 `imagec_and_MMSA`；
+- `command_cwd` 能够定位到 `traditional_comm_py`；
 - 任务结果能够写入独立 `runs/<run_id>/result.json`；
+- 外部模型失败时能够保留 JSON 错误信息；
 - CIFAR-10 读取、随机抽样和传统通信回环；
 - TCP 传输回环；
 - 图像分类和视频情感任务配置映射。

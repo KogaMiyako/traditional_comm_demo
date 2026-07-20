@@ -175,18 +175,19 @@ class ConfiguredTaskAdapter:
         except (OSError, subprocess.TimeoutExpired) as exc:
             result.update({"status": "failed", "error": str(exc)})
             return result
-        if completed.returncode != 0:
-            result.update(
-                {
-                    "status": "failed",
-                    "error": completed.stderr.strip() or f"task command exited with {completed.returncode}",
-                }
-            )
-            return result
         try:
             external_result = json.loads(completed.stdout)
         except json.JSONDecodeError as exc:
-            result.update({"status": "failed", "error": f"task command returned invalid JSON: {exc}"})
+            result.update(
+                {
+                    "status": "failed",
+                    "error": (
+                        completed.stderr.strip()
+                        or (f"task command exited with {completed.returncode}" if completed.returncode else None)
+                        or f"task command returned invalid JSON: {exc}"
+                    ),
+                }
+            )
             return result
         if not isinstance(external_result, Mapping):
             result.update({"status": "failed", "error": "task command result must be a JSON object"})
@@ -194,7 +195,13 @@ class ConfiguredTaskAdapter:
         for key in ("prediction", "metrics", "model_version", "checkpoint", "error"):
             if key in external_result:
                 result[key] = external_result[key]
-        result["success"] = bool(external_result.get("success", True)) and not result.get("error")
+        if completed.returncode != 0 and not result.get("error"):
+            result["error"] = completed.stderr.strip() or f"task command exited with {completed.returncode}"
+        result["success"] = (
+            completed.returncode == 0
+            and bool(external_result.get("success", True))
+            and not result.get("error")
+        )
         result["status"] = "completed" if result["success"] else "failed"
         return result
 

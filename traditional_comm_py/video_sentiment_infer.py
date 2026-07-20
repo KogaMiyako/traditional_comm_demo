@@ -11,11 +11,11 @@ from typing import Any, Dict
 
 import numpy as np
 
-from traditional_comm_py.runtime import PROJECT_ROOT, json_error, load_config, resolve_path
+from inference_runtime import PROJECT_ROOT, json_error, load_config, resolve_path
 
 
-def _mmsa_imports():
-    sys.path.insert(0, str(PROJECT_ROOT / "MMSA" / "src"))
+def _mmsa_imports(source_root: Path):
+    sys.path.insert(0, str(source_root / "src"))
     from easydict import EasyDict as edict
     from MMSA.models import AMIO
 
@@ -59,20 +59,21 @@ def _metric_value(metrics: Dict[str, Any], *names):
 
 def main() -> int:
     config = load_config()
-    cfg = config["video_sentiment"]
+    cfg = config["tasks"]["video_sentiment"]
     model_cfg = cfg["model"]
-    checkpoint_display = str(cfg["checkpoint"])
+    checkpoint_display = str(model_cfg["checkpoint"])
     start = time.perf_counter()
     try:
         request = json.load(sys.stdin)
         task_model = request.get("task_config", {}).get("model", {})
-        checkpoint_value = task_model.get("checkpoint") or cfg["checkpoint"]
+        checkpoint_value = task_model.get("checkpoint") or model_cfg["checkpoint"]
         checkpoint = resolve_path(checkpoint_value)
         import torch
 
         state = torch.load(checkpoint, map_location="cpu")
         model_args = dict(state.get("model_args", {}))
-        edict, AMIO = _mmsa_imports()
+        mmsa_source_value = task_model.get("mmsa_source") or model_cfg["mmsa_source"]
+        edict, AMIO = _mmsa_imports(resolve_path(mmsa_source_value))
         sample = _sample_from_file(resolve_path(request["input_path"]), request)
         text = np.asarray(sample["text"], dtype=np.float32)
         audio = np.asarray(sample["audio"], dtype=np.float32)
@@ -97,7 +98,7 @@ def main() -> int:
                 torch.from_numpy(vision).unsqueeze(0),
             )
         score = float(output["M"].reshape(-1)[0])
-        label = "positive" if score >= float(cfg["positive_threshold"]) else "negative"
+        label = "positive" if score >= float(cfg.get("positive_threshold", 0.0)) else "negative"
         test_metrics = state.get("metrics", {})
         metrics = {
             "mae": _metric_value(test_metrics, "mae", "MAE"),
