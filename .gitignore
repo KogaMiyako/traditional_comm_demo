@@ -10,3 +10,24 @@ traditional_comm_py/runs/*
 *.tmp
 __pycache__/
 *.py[cod]
+
+# Local reference implementation and datasets are not repository source files.
+UdeepscFSM/
+dataset/
+**/dataset/
+# Downstream model workspaces are local training dependencies. Keep the
+# integration scripts and small result records, but do not commit vendored
+# repositories, datasets, weights, logs, or Python caches.
+imagec_and_MMSA/MMSA/
+imagec_and_MMSA/pytorch-cifar/
+imagec_and_MMSA/data/
+imagec_and_MMSA/artifacts/checkpoints/
+imagec_and_MMSA/artifacts/logs/
+imagec_and_MMSA/artifacts/samples/
+imagec_and_MMSA/**/__pycache__/
+imagec_and_MMSA/**/.git/
+**/checkpoints/
+**/ckpt_record/
+*.pth
+*.pt
+*.pkl

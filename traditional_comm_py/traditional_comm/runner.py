@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import math
 from pathlib import Path
 import time
 import tracemalloc
@@ -10,6 +9,8 @@ import uuid
 
 from .codecs import codec_info, decode_payload, encode_payload
 from .samples import parse_ppm, parse_tvid
+from .task_adapter import TaskAdapter, create_task_adapter
+from .task_metrics import quality_metrics
 
 
 def create_run_id(kind: str) -> str:
@@ -45,52 +46,8 @@ def _validate(kind: str, output: bytes) -> tuple[bool, dict]:
     }
 
 
-def _psnr(source_pixels: bytes, output_pixels: bytes) -> float | None:
-    if len(source_pixels) != len(output_pixels) or not source_pixels:
-        return None
-    squared_error = sum(
-        (source_value - output_value) ** 2
-        for source_value, output_value in zip(source_pixels, output_pixels)
-    )
-    mse = squared_error / len(source_pixels)
-    if mse == 0:
-        return 99.0
-    return round(10 * math.log10((255**2) / mse), 3)
-
-
 def _quality_metrics(kind: str, source: bytes, output: bytes) -> dict:
-    if kind == "image":
-        source_info = parse_ppm(source)
-        output_info = parse_ppm(output)
-        if (source_info["width"], source_info["height"]) != (
-            output_info["width"],
-            output_info["height"],
-        ):
-            return {"psnr": None, "ssim": None, "lpips": None}
-        return {
-            "psnr": _psnr(source_info["pixel_bytes"], output_info["pixel_bytes"]),
-            "ssim": None,
-            "lpips": None,
-        }
-    if kind == "video":
-        source_info = parse_tvid(source)
-        output_info = parse_tvid(output)
-        same_shape = (
-            source_info["width"] == output_info["width"]
-            and source_info["height"] == output_info["height"]
-            and source_info["frame_count"] == output_info["frame_count"]
-        )
-        if not same_shape:
-            return {"psnr": None, "ssim": None, "lpips": None}
-        return {
-            "psnr": _psnr(
-                source[source_info["header_bytes"] :],
-                output[output_info["header_bytes"] :],
-            ),
-            "ssim": None,
-            "lpips": None,
-        }
-    return {"psnr": None, "ssim": None, "lpips": None}
+    return quality_metrics(kind, source, output)
 
 
 def _codec_config(kind: str, encoded) -> dict:
@@ -115,8 +72,10 @@ def run_one(
     task: dict | None = None,
     run_id: str | None = None,
     codec_options: dict | None = None,
+    task_adapter: TaskAdapter | None = None,
 ) -> dict:
     task = task or {}
+    task_adapter = task_adapter or create_task_adapter()
     run_id = run_id or create_run_id(kind)
     run_dir = runs_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -179,6 +138,16 @@ def run_one(
     tracemalloc.stop()
     process_cpu_ms = (time.process_time() - process_start) * 1000
     quality = _quality_metrics(kind, input_data, output)
+    task_result = task_adapter.run(
+        kind=kind,
+        source_path=input_path,
+        decoded_path=decoded_path,
+        source_bytes=input_data,
+        decoded_bytes=output,
+        task=task,
+        quality=quality,
+    )
+    task_ok = bool(task_result.get("success", False))
 
     config = {
         "run_id": run_id,
@@ -226,14 +195,18 @@ def run_one(
         "receiver_decode_valid": receiver_decode_valid,
         "receiver_result_path": transport_stats.get("receiver_result_path"),
         "quality": quality,
-        "task": {"content_match": content_match, "output_valid": int(valid)},
+        "task": {
+            "content_match": content_match,
+            "output_valid": int(valid),
+            "task_result": task_result,
+        },
         "resource": {
             "python_process_cpu_ms": round(process_cpu_ms, 3),
             "tracemalloc_current_bytes": current,
             "tracemalloc_peak_bytes": peak,
             "gpu_usage": None,
         },
-        "status": "completed" if valid else "failed",
+        "status": "completed" if valid and task_ok else "failed",
     }
     _write_json(run_dir / "config.json", config)
     _write_json(run_dir / "metrics.json", metrics)
@@ -251,6 +224,7 @@ def run_one(
             "validation": validation,
             "receiver_decode_valid": receiver_decode_valid,
             "receiver_result_path": transport_stats.get("receiver_result_path"),
+            "task_result": task_result,
         },
     )
     return {
@@ -262,12 +236,75 @@ def run_one(
     }
 
 
+def run_task_only(
+    kind: str,
+    input_path: Path,
+    runs_dir: Path,
+    task: dict | None = None,
+    run_id: str | None = None,
+    task_adapter: TaskAdapter | None = None,
+) -> dict:
+    """Run a downstream task directly on a task-compatible input file.
+
+    This is used for feature-level datasets such as MOSEI.  A MOSEI ``.pkl``
+    feature sample is not an encoded video container, so it must not be sent
+    through the H.264/MP4 transport path.  The result still uses the same
+    run directory and task-result schema as a normal communication run.
+    """
+
+    task = task or {}
+    task_adapter = task_adapter or create_task_adapter()
+    run_id = run_id or create_run_id(f"task-{kind}")
+    run_dir = runs_dir / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    input_path = input_path.resolve()
+    input_data = input_path.read_bytes()
+    task_result = task_adapter.run(
+        kind=kind,
+        source_path=input_path,
+        decoded_path=input_path,
+        source_bytes=input_data,
+        decoded_bytes=input_data,
+        task=task,
+        quality={},
+    )
+    status = "completed" if task_result.get("success") else "failed"
+    config = {
+        "run_id": run_id,
+        "mode": "traditional",
+        "execution": "task-only",
+        "media_type": kind,
+        "input_path": str(input_path),
+        "task": task,
+        "transport": None,
+        "note": "No media codec or transport was run; input is already task-compatible.",
+    }
+    metrics = {
+        "run_id": run_id,
+        "mode": "traditional",
+        "execution": "task-only",
+        "media_type": kind,
+        "input_bytes": len(input_data),
+        "encoded_payload_bytes": None,
+        "actual_sent_bytes": None,
+        "actual_received_bytes": None,
+        "end_to_end_latency_ms": task_result.get("inference_time_ms"),
+        "task": {"task_result": task_result},
+        "status": status,
+    }
+    _write_json(run_dir / "config.json", config)
+    _write_json(run_dir / "metrics.json", metrics)
+    _write_json(run_dir / "result.json", {"run_id": run_id, "input_path": str(input_path), "task_result": task_result})
+    return {"run_id": run_id, "run_dir": run_dir, "kind": kind, "metrics": metrics, "output_path": input_path}
+
+
 def run_all(
     samples_dir: Path,
     runs_dir: Path,
     transport,
     task: dict | None = None,
     codec_options: dict | None = None,
+    task_adapter: TaskAdapter | None = None,
 ) -> list[dict]:
     runs_dir.mkdir(parents=True, exist_ok=True)
     inputs = {
@@ -279,6 +316,14 @@ def run_all(
     if missing:
         raise FileNotFoundError("Missing samples: " + ", ".join(missing))
     return [
-        run_one(kind, path, runs_dir, transport, task, codec_options=codec_options)
+        run_one(
+            kind,
+            path,
+            runs_dir,
+            transport,
+            task,
+            codec_options=codec_options,
+            task_adapter=task_adapter,
+        )
         for kind, path in inputs.items()
     ]

@@ -1,0 +1,18 @@
+{
+  "python": "3.9.25 (main, Nov  3 2025, 22:33:05) \n[GCC 11.2.0]",
+  "platform": "Linux-5.4.0-132-generic-x86_64-with-glibc2.31",
+  "working_directory": "/home/longxiang/traditional_comm_demo",
+  "packages": {
+    "numpy": "1.24.4",
+    "Pillow": "11.3.0",
+    "scikit-learn": "1.6.1",
+    "torch": "1.13.0",
+    "torchvision": "0.14.0",
+    "MMSA": "not-installed"
+  },
+  "torch": {
+    "version": "1.13.0+cu117",
+    "cuda_available": true,
+    "cuda_version": "11.7"
+  }
+}

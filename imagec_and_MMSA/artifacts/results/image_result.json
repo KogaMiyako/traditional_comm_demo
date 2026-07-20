@@ -1,0 +1,43 @@
+{
+  "success": true,
+  "prediction": {
+    "label": 6,
+    "label_name": "frog",
+    "confidence": 0.30441999435424805,
+    "top_k": [
+      {
+        "label": 6,
+        "label_name": "frog",
+        "confidence": 0.30441999435424805
+      },
+      {
+        "label": 3,
+        "label_name": "cat",
+        "confidence": 0.17433854937553406
+      },
+      {
+        "label": 2,
+        "label_name": "bird",
+        "confidence": 0.17270486056804657
+      },
+      {
+        "label": 4,
+        "label_name": "deer",
+        "confidence": 0.09453139454126358
+      },
+      {
+        "label": 5,
+        "label_name": "dog",
+        "confidence": 0.09155203402042389
+      }
+    ]
+  },
+  "metrics": {
+    "top1": 0.0,
+    "top5": 1.0
+  },
+  "model_version": "resnet18-cifar10-v1",
+  "checkpoint": "artifacts/checkpoints/resnet18-cifar10-v1.pt",
+  "error": null,
+  "inference_time_ms": 1750.988
+}

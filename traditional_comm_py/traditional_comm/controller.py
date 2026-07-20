@@ -4,12 +4,20 @@ import json
 from pathlib import Path
 
 from .runner import create_run_id, run_one
+from .task_adapter import TaskAdapter, create_task_adapter
 
 
 class TraditionalCommunicationController:
-    def __init__(self, runs_dir: Path, transport):
+    def __init__(
+        self,
+        runs_dir: Path,
+        transport,
+        task_adapter: TaskAdapter | None = None,
+        config: dict | str | Path | None = None,
+    ):
         self.runs_dir = Path(runs_dir).resolve()
         self.transport = transport
+        self.task_adapter = task_adapter or create_task_adapter(config)
         self.mode = "traditional"
         self.states: dict[str, dict] = {}
 
@@ -64,6 +72,7 @@ class TraditionalCommunicationController:
                 config.get("task", {}),
                 run_id=run_id,
                 codec_options=config.get("codec_options"),
+                task_adapter=self.task_adapter,
             )
             state.update(
                 {

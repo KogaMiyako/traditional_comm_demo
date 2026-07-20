@@ -1,0 +1,121 @@
+{
+  "runtime": {
+    "python": "python",
+    "project_root": ".",
+    "communication_result": "artifacts/results/result.json",
+    "inference_time_field": "inference_time_ms"
+  },
+  "image_classification": {
+    "task_type": "image_classification",
+    "semantic_task": "imgc",
+    "dataset": "cifar10",
+    "data_root": "data/cifar",
+    "checkpoint": "artifacts/checkpoints/resnet18-cifar10-v1.pt",
+    "sample_path": "artifacts/samples/cifar10_sample.png",
+    "log_path": "artifacts/logs/cifar10_train.log",
+    "metrics_path": "artifacts/metrics/cifar10_test.json",
+    "classes_path": "artifacts/metadata/cifar10_classes.json",
+    "environment_path": "artifacts/metadata/cifar10_environment.json",
+    "command": [
+      "python",
+      "image_infer.py"
+    ],
+    "model": {
+      "name": "resnet18",
+      "version": "resnet18-cifar10-v1",
+      "input_size": 32
+    },
+    "train": {
+      "seed": 42,
+      "device": "cuda",
+      "epochs": 1,
+      "batch_size": 128,
+      "learning_rate": 0.1,
+      "momentum": 0.9,
+      "weight_decay": 0.0005,
+      "num_workers": 0,
+      "download_if_missing": true,
+      "max_train_samples": null,
+      "max_test_samples": null,
+      "normalize_mean": [
+        0.4914,
+        0.4822,
+        0.4465
+      ],
+      "normalize_std": [
+        0.2023,
+        0.1994,
+        0.2010
+      ]
+    },
+    "metrics": [
+      "accuracy",
+      "f1",
+      "top1",
+      "top5"
+    ]
+  },
+  "video_sentiment": {
+    "task_type": "video_sentiment",
+    "semantic_task": "msa",
+    "dataset": "mosei",
+    "source_dir": "data/MOSEI",
+    "feature_path": "data/MOSEI/mmsa_features.pkl",
+    "checkpoint": "artifacts/checkpoints/mmsa-mosei-v1.pt",
+    "log_path": "artifacts/logs/mosei_train.log",
+    "metrics_path": "artifacts/metrics/mosei_test.json",
+    "environment_path": "artifacts/metadata/mosei_environment.json",
+    "sample_path": "data/MOSEI/sample_test.pkl",
+    "command": [
+      "python",
+      "video_sentiment_infer.py"
+    ],
+    "model": {
+      "name": "lf_dnn",
+      "version": "mmsa-mosei-v1",
+      "framework": "MMSA-2.2.1"
+    },
+    "label_type": "regression",
+    "train": {
+      "seed": 42,
+      "batch_size": 64,
+      "learning_rate": 0.002,
+      "weight_decay": 0.001,
+      "early_stop": 1,
+      "num_workers": 0,
+      "device": "cuda",
+      "max_epochs": 2,
+      "max_train_samples": null,
+      "max_valid_samples": null,
+      "max_test_samples": null,
+      "need_data_aligned": false,
+      "need_model_aligned": false,
+      "need_normalized": true,
+      "use_bert": false,
+      "hidden_dims": [
+        128,
+        32,
+        128
+      ],
+      "text_out": 128,
+      "post_fusion_dim": 128,
+      "dropouts": [
+        0.2,
+        0.2,
+        0.2,
+        0.2
+      ]
+    },
+    "feature_conversion": {
+      "max_seq_len": 50,
+      "text_dim": 32
+    },
+    "metrics": [
+      "mae",
+      "correlation",
+      "accuracy",
+      "f1"
+    ],
+    "positive_threshold": 0.0
+  }
+}

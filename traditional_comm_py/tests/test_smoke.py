@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import json
+import pickle
 from pathlib import Path
+import sys
 import tempfile
 import threading
 import unittest
 
+from traditional_comm.config import get_dataset_config, get_task_config, load_config
 from traditional_comm.controller import TraditionalCommunicationController
-from traditional_comm.runner import run_all
+from traditional_comm.dataset_adapter import materialize_cifar10_sample, select_cifar10_sample
+from traditional_comm.runner import run_all, run_task_only
 from traditional_comm.samples import generate_samples, parse_tvid
+from traditional_comm.task_adapter import ConfiguredTaskAdapter
 from traditional_comm.transport import LanTcpReceiver, LanTcpTransport, LoopbackTransport
 
 
@@ -95,6 +100,102 @@ class TraditionalCommunicationSmokeTest(unittest.TestCase):
                 self.assertTrue(receiver_result.exists())
             finally:
                 receiver.close()
+
+    def test_config_and_udeepsc_task_contract(self) -> None:
+        config = load_config()
+        self.assertTrue(Path(config["paths"]["dataset_root"]).name == "dataset")
+        self.assertEqual(get_dataset_config(config, "cifar10")["num_classes"], 10)
+        self.assertEqual(get_task_config(config, "image_classification")["semantic_task"], "imgc")
+        self.assertEqual(get_task_config(config, "video_sentiment")["semantic_task"], "msa")
+
+    def test_external_task_command_contract(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="traditional-task-adapter-") as root:
+            root_path = Path(root)
+            input_path = root_path / "decoded.ppm"
+            input_path.write_bytes(b"test-input")
+            config = load_config()
+            config["tasks"]["image_classification"]["command"] = [
+                sys.executable,
+                "-c",
+                (
+                    "import json,sys; json.load(sys.stdin); "
+                    "print(json.dumps({'success': True, 'prediction': {'label': 3}, "
+                    "'metrics': {'top1': 1.0}}))"
+                ),
+            ]
+            adapter = ConfiguredTaskAdapter(config)
+            result = adapter.run(
+                kind="image",
+                source_path=input_path,
+                decoded_path=input_path,
+                source_bytes=b"test-input",
+                decoded_bytes=b"test-input",
+                task={"task_type": "image_classification"},
+                quality={},
+            )
+            self.assertTrue(result["success"])
+            self.assertEqual(result["semantic_task"], "imgc")
+            self.assertEqual(result["prediction"]["label"], 3)
+
+    def test_external_task_command_cwd_and_task_only_run(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="traditional-task-only-") as root:
+            root_path = Path(root)
+            input_path = root_path / "sample_test.pkl"
+            input_path.write_bytes(b"feature-sample")
+            config = load_config()
+            config["tasks"]["video_sentiment"]["command_cwd"] = str(root_path)
+            config["tasks"]["video_sentiment"]["command"] = [
+                sys.executable,
+                "-c",
+                (
+                    "import json,sys; request=json.load(sys.stdin); "
+                    "print(json.dumps({'success': True, 'prediction': {'sentiment_score': 0.2}, "
+                    "'metrics': {'mae': 0.1}, 'model_version': 'test-mmsa'}))"
+                ),
+            ]
+            result = run_task_only(
+                "video",
+                input_path,
+                root_path / "runs",
+                {"task_id": "mosei-smoke", "task_type": "video_sentiment"},
+                task_adapter=ConfiguredTaskAdapter(config),
+            )
+            self.assertEqual(result["metrics"]["status"], "completed")
+            self.assertEqual(
+                result["metrics"]["task"]["task_result"]["prediction"]["sentiment_score"],
+                0.2,
+            )
+            self.assertTrue((result["run_dir"] / "result.json").exists())
+
+    def test_cifar10_random_sample_materialization(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="traditional-cifar-") as root:
+            cifar_root = Path(root) / "cifar"
+            cifar_root.mkdir()
+            rows = [bytes([value % 256 for value in range(3072)]), bytes([7] * 3072)]
+            with (cifar_root / "test_batch").open("wb") as handle:
+                pickle.dump({b"data": rows, b"labels": [2, 5]}, handle)
+            with (cifar_root / "batches.meta").open("wb") as handle:
+                pickle.dump({b"label_names": [b"zero", b"one", b"two", b"three", b"four", b"five"]}, handle)
+
+            sample = select_cifar10_sample(
+                cifar_root,
+                split="test",
+                mode="random",
+                seed=100,
+                samples_per_file=2,
+            )
+            repeated = select_cifar10_sample(
+                cifar_root,
+                split="test",
+                mode="random",
+                seed=100,
+                samples_per_file=2,
+            )
+            self.assertEqual(sample.index, repeated.index)
+            self.assertEqual(sample.label_name, ["two", "five"][sample.index])
+            self.assertTrue(sample.ppm_bytes.startswith(b"P6\n32 32\n255\n"))
+            materialized = materialize_cifar10_sample(sample, Path(root) / "selected")
+            self.assertTrue(materialized.exists())
 
 
 if __name__ == "__main__":

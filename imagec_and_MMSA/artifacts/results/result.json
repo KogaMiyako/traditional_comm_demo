@@ -1,0 +1,17 @@
+{
+  "success": true,
+  "prediction": {
+    "sentiment_score": 0.004892533645033836,
+    "label": "positive"
+  },
+  "metrics": {
+    "mae": 0.32844080962240696,
+    "correlation": null,
+    "accuracy": 1.0,
+    "f1": 1.0
+  },
+  "model_version": "mmsa-mosei-v1",
+  "checkpoint": "artifacts/checkpoints/mmsa-mosei-v1.pt",
+  "error": null,
+  "inference_time_ms": 2947.63
+}

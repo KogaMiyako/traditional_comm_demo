@@ -40,6 +40,62 @@ Set-Location D:\workspace\SemCom\traditional_comm_py
 & D:\miniconda3\envs\semcom-py\python.exe -m traditional_comm.cli run
 ```
 
+## 配置和下游任务
+
+默认配置文件为 `config/default.json`。数据集、样本目录、运行目录、编码参数、传输参数、任务映射、模型 checkpoint 和指标列表都从该文件读取；命令行参数可以覆盖单次运行的配置。
+
+本地运行一次任务：
+
+```powershell
+& D:\miniconda3\envs\semcom-py\python.exe -m traditional_comm.cli task-run `
+    --config .\config\default.json `
+    --kind image `
+    --dataset cifar10 `
+    --task-type image_reconstruction
+```
+
+默认从 `dataset/cifar` 的 test 集按固定 seed 随机选择一张 CIFAR-10 图片，并自动转换为 PPM 后进入 JPEG 和传统通信流程。需要严格复现实验时，可以增加 `--sample-mode index --sample-index 1234`。`samples/sample.ppm` 仍用于基础链路冒烟测试。
+
+任务名称和 UDeepSC 任务保持对应关系：
+
+```text
+image_classification -> imgc
+image_reconstruction -> imgr
+video_sentiment      -> msa
+```
+
+图像重建使用内置质量指标；图像分类和视频情感分析通过配置的外部任务命令执行，命令从标准输入接收 JSON，并向标准输出返回 JSON。这样传统通信代码不依赖 UDeepSC 的 Python 环境，UDeepSC 只作为任务输入、输出和指标的参考实现。
+
+运行结果中的 `metrics.json` 和 `result.json` 会保存 `task_result`，包含任务类型、语义任务名、预测结果、任务指标、推理耗时、模型版本、checkpoint 和错误信息。
+
+### 已接入的下游模型
+
+分类模型和 MMSA 推理封装位于 `../imagec_and_MMSA`，主配置已经填写对应的 `command`、`command_cwd` 和 checkpoint。图像分类会完整经过 JPEG 传统通信流程：
+
+```powershell
+& D:\miniconda3\envs\semcom-py\python.exe -m traditional_comm.cli task-run `
+    --config .\config\default.json `
+    --kind image `
+    --dataset cifar10 `
+    --task-type image_classification `
+    --sample-mode index `
+    --sample-index 0
+```
+
+当前 MMSA 模型使用 MOSEI 的文本、音频和视觉特征，不直接接收 MP4，因此使用 `task-infer`：
+
+```powershell
+& D:\miniconda3\envs\semcom-py\python.exe -m traditional_comm.cli task-infer `
+    --config .\config\default.json `
+    --kind video `
+    --input ..\imagec_and_MMSA\data\MOSEI\sample_test.pkl `
+    --task-type video_sentiment `
+    --split test `
+    --sample-index 0
+```
+
+详细输入输出字段、服务器环境要求和结果示例见 `../doc/内容2图像分类与MOSEI视频情感任务对接说明.md`。
+
 ## 测试
 
 ```powershell

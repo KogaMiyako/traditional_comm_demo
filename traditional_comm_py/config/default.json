@@ -1,0 +1,132 @@
+{
+  "version": "task-adapter-v1",
+  "paths": {
+    "dataset_root": "../../dataset",
+    "samples_dir": "../samples",
+    "materialized_samples_dir": "../samples/selected",
+    "runs_dir": "../runs",
+    "receiver_runs_dir": "../runs_receiver",
+    "model_dir": "../../models"
+  },
+  "datasets": {
+    "cifar10": {
+      "root": "cifar",
+      "format": "cifar10-python",
+      "samples_per_file": 10000,
+      "num_classes": 10,
+      "input_size": 32
+    },
+    "mosei": {
+      "root": "MOSEI",
+      "format": "mosei-precomputed-features",
+      "train_file": "train.pkl",
+      "dev_file": "dev.pkl",
+      "test_file": "test.pkl",
+      "embedding_file": "embedding_and_mapping.pt",
+      "input_modalities": ["visual", "text", "acoustic"]
+    }
+  },
+  "sample_selection": {
+    "dataset": "cifar10",
+    "split": "test",
+    "mode": "random",
+    "seed": 100,
+    "index": null
+  },
+  "tasks": {
+    "image_classification": {
+      "semantic_task": "imgc",
+      "dataset": "cifar10",
+      "media_type": "image",
+      "input_type": "decoded_image",
+      "output_type": "structured",
+      "backend": "command",
+      "command": [
+        "python",
+        "image_infer.py"
+      ],
+      "command_cwd": "../../imagec_and_MMSA",
+      "model": {
+        "name": "resnet18",
+        "version": "resnet18-cifar10-v1",
+        "checkpoint": "artifacts/checkpoints/resnet18-cifar10-v1.pt"
+      },
+      "metrics": ["accuracy", "f1", "top1", "top5"]
+    },
+    "image_reconstruction": {
+      "semantic_task": "imgr",
+      "dataset": "cifar10",
+      "media_type": "image",
+      "input_type": "decoded_image",
+      "output_type": "reconstruction",
+      "backend": "builtin",
+      "input_size": 32,
+      "metrics": ["psnr", "ssim", "lpips"]
+    },
+    "video_reconstruction": {
+      "semantic_task": null,
+      "dataset": null,
+      "media_type": "video",
+      "input_type": "decoded_video",
+      "output_type": "reconstruction",
+      "backend": "builtin",
+      "metrics": ["psnr", "ssim", "lpips"]
+    },
+    "text_reconstruction": {
+      "semantic_task": null,
+      "dataset": null,
+      "media_type": "text",
+      "input_type": "decoded_text",
+      "output_type": "reconstruction",
+      "backend": "builtin",
+      "metrics": ["content_match"]
+    },
+    "video_sentiment": {
+      "semantic_task": "msa",
+      "dataset": "mosei",
+      "media_type": "video",
+      "input_type": "mosei_features",
+      "output_type": "task_result",
+      "backend": "command",
+      "command": [
+        "python",
+        "video_sentiment_infer.py"
+      ],
+      "command_cwd": "../../imagec_and_MMSA",
+      "label_type": "regression",
+      "model": {
+        "name": "lf_dnn",
+        "version": "mmsa-mosei-v1",
+        "checkpoint": "artifacts/checkpoints/mmsa-mosei-v1.pt"
+      },
+      "metrics": ["mae", "correlation", "accuracy", "f1"]
+    }
+  },
+  "codec": {
+    "image": {
+      "jpeg_quality": 3
+    },
+    "video": {
+      "h264_crf": 23,
+      "h264_preset": "ultrafast"
+    }
+  },
+  "transport": {
+    "loopback": {
+      "chunk_size": 16384,
+      "delay_ms": 0,
+      "loss_rate": 0
+    },
+    "lan_tcp": {
+      "bind": "0.0.0.0",
+      "port": 5000,
+      "connect_timeout_ms": 5000,
+      "receive_timeout_ms": 30000,
+      "max_connections": 1
+    }
+  },
+  "snr_sweep": {
+    "enabled": false,
+    "values_db": []
+  }
+}
