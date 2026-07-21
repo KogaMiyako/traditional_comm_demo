@@ -520,7 +520,7 @@ class LanTcpReceiver:
             try:
                 connection, peer = self._server_socket.accept()
                 break
-            except TimeoutError:
+            except (TimeoutError, socket.timeout):
                 continue
         with connection:
             connection.settimeout(30)

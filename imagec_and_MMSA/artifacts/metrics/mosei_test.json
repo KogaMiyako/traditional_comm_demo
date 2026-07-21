@@ -1,11 +1,11 @@
 {
-  "Has0_acc_2": 0.7104,
-  "Has0_F1_score": 0.5901,
-  "Non0_acc_2": 0.6285,
-  "Non0_F1_score": 0.4852,
-  "Mult_acc_5": 0.4136,
-  "Mult_acc_7": 0.4136,
-  "MAE": 0.8383,
-  "Corr": null,
-  "Loss": 0.8382
+  "Has0_acc_2": 0.7391,
+  "Has0_F1_score": 0.7487,
+  "Non0_acc_2": 0.7909,
+  "Non0_F1_score": 0.7914,
+  "Mult_acc_5": 0.4757,
+  "Mult_acc_7": 0.4691,
+  "MAE": 0.6409,
+  "Corr": 0.637,
+  "Loss": 0.641
 }

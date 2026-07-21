@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import shlex
 import subprocess
+import sys
 import time
 from collections.abc import Mapping
 from pathlib import Path
@@ -144,6 +145,8 @@ class ConfiguredTaskAdapter:
             return result
 
         command_args = shlex.split(command, posix=False) if isinstance(command, str) else list(command)
+        if command_args and command_args[0] in {"python", "python3"}:
+            command_args[0] = sys.executable
         command_cwd = task_config.get("command_cwd")
         if command_cwd:
             command_cwd_path = Path(str(command_cwd))

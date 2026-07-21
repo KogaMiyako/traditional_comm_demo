@@ -20,7 +20,7 @@ artifacts/logs/            # 训练日志
 
 服务器上需要将上述依赖放回对应路径。训练和推理命令见：
 
-- `TRAINING_AND_INFERENCE.md`
+- `../doc/CIFAR-10与MOSEI训练推理说明.md`
 - `../doc/内容2图像分类与MOSEI视频情感任务对接说明.md`
 
 推理脚本现在位于主项目的 `traditional_comm_py/image_infer.py` 和

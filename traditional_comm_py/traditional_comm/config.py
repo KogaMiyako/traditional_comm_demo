@@ -10,13 +10,19 @@ PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG_PATH = PACKAGE_ROOT / "config" / "default.json"
 
 
-def _resolve_path(value: str | Path | None, base: Path) -> str | None:
+def _resolve_path(
+    value: str | Path | None,
+    base: Path,
+    preserve_final_symlink: bool = False,
+) -> str | None:
     if value is None:
         return None
     path = Path(value)
     if not path.is_absolute():
         path = base / path
-    return str(path.resolve())
+    # Keep the configured project-level ``dataset`` link visible for callers
+    # and tests, while concrete dataset paths below still resolve normally.
+    return str(path.absolute() if preserve_final_symlink else path.resolve())
 
 
 def load_config(path: str | Path | None = None) -> dict[str, Any]:
@@ -39,7 +45,11 @@ def load_config(path: str | Path | None = None) -> dict[str, Any]:
         "model_dir",
     ):
         if key in paths:
-            paths[key] = _resolve_path(paths[key], config_base)
+            paths[key] = _resolve_path(
+                paths[key],
+                config_base,
+                preserve_final_symlink=key == "dataset_root",
+            )
 
     dataset_root = Path(paths["dataset_root"])
     for dataset_config in config.setdefault("datasets", {}).values():

@@ -1,5 +1,27 @@
 # Python 传统通信本地基线
 
+完整的任务运行、回环/TCP 双端切换和指标说明见：
+[传统通信任务运行说明](../doc/传统通信任务运行说明.md)。
+
+按单个实验执行的命令清单见：
+[传统通信实验命令清单](../doc/传统通信实验命令清单.md)。
+
+演示全部功能（本地回环、图像双端重建/分类、MOSEI 双端特征推理）：
+
+```bash
+python demo_all.py
+```
+
+默认图像端口为 `5001`，MOSEI 特征端口为 `5002`；汇总结果写入 `runs/demo_all/demo_summary.json`。
+
+如果当前目录是项目根目录 `KogaMiyako_traditional_comm_demo/`，请使用：
+
+```bash
+python traditional_comm_py/demo_all.py
+```
+
+直接执行 `python -m traditional_comm.cli` 时，必须先进入 `traditional_comm_py/`，否则会误命中根目录下的 JavaScript `traditional_comm/` 目录。
+
 这是“内容 2：传统通信模型搭建”的 Python 单机基线。运行环境为：
 
 ```text
@@ -93,6 +115,21 @@ video_sentiment      -> msa
     --split test `
     --sample-index 0
 ```
+
+Linux 本地验证时，在已安装 PyTorch、torchvision 和 FFmpeg 的环境中执行：
+
+```bash
+python -m traditional_comm.cli task-run \
+  --config config/default.json --kind image --dataset cifar10 \
+  --task-type image_classification --sample-mode index --sample-index 0
+
+python -m traditional_comm.cli task-infer \
+  --config config/default.json --kind video \
+  --input ../imagec_and_MMSA/data/MOSEI/sample_test.pkl \
+  --task-type video_sentiment --split test --sample-index 0
+```
+
+当前接入的最佳模型结果为：CIFAR-10 Top-1 `0.8699`、Top-5 `0.9956`；MOSEI MAE `0.6409`、correlation `0.6370`。实际 loopback 验证中，图像经过 JPEG 编码/解码后仍预测为 `cat`，Top-1/Top-5 均为 `1.0`；MOSEI 特征级任务返回 `positive`，运行目录中的 `metrics.json` 和 `result.json` 保存完整结果。
 
 详细输入输出字段、服务器环境要求和结果示例见 `../doc/内容2图像分类与MOSEI视频情感任务对接说明.md`。
 

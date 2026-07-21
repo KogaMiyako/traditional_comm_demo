@@ -139,6 +139,14 @@
       "max_connections": 1
     }
   },
+  "demo": {
+    "output_dir": "../runs/demo_all",
+    "host": "127.0.0.1",
+    "image_port": 5001,
+    "video_feature_port": 5002,
+    "receiver_max_connections": 2,
+    "mosei_sample": "../../imagec_and_MMSA/data/MOSEI/sample_test.pkl"
+  },
   "snr_sweep": {
     "enabled": false,
     "values_db": []

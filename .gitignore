@@ -14,6 +14,7 @@ __pycache__/
 # Local reference implementation and datasets are not repository source files.
 UdeepscFSM/
 dataset/
+dataset
 **/dataset/
 # Downstream model workspaces are local training dependencies. Keep the
 # integration scripts and small result records, but do not commit vendored
