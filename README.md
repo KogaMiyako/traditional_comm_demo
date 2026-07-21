@@ -88,6 +88,16 @@ KogaMiyako_traditional_comm_demo/
 
 Python 通信实现位于 `traditional_comm_py/`。`traditional_comm_py/traditional_comm/` 是当前使用的 Python 包；项目不再保留旧的 Node.js 版本目录。
 
+## 依赖安装
+
+项目根目录的 [requirements.txt](requirements.txt) 是根据当前代码手工整理的 Python 依赖清单，不是某个 Conda 环境的直接导出。安装时需要根据目标机器选择匹配的 PyTorch/CUDA 构建：
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+FFmpeg 需要单独通过系统包管理器或 Conda 安装；MMSA、`pytorch-cifar`、数据集和 checkpoint 是项目外部/本地资源，不由 pip requirements 下载。
+
 ## 运行结果
 
 每个实验使用独立的运行目录，例如：
